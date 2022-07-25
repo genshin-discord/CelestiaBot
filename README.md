@@ -9,6 +9,10 @@ A simple yet powerful discord genshin bot
 * Reminder for resin/transformer/teapot coins
 * More incoming...
 
+## How to add my account?
+
+See https://github.com/genshin-discord/genshinbot/blob/main/register.md
+
 ## BotLink
 
 [Click me to add to your server](https://discord.com/api/oauth2/authorize?client_id=988697044988334100&permissions=414464731200&scope=bot%20applications.commands)
