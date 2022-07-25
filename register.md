@@ -1,4 +1,4 @@
-# GenshinBot registeration help
+# GenshinBot registration help
 
 ## /reg command
 ![image](https://user-images.githubusercontent.com/109652760/180729149-44a5c0ff-2121-4863-90f6-a935663f3a47.png)
