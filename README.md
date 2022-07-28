@@ -11,7 +11,7 @@ A simple yet powerful discord genshin bot
 
 ## How to add my account?
 
-See https://github.com/genshin-discord/genshinbot/blob/main/register.md
+See https://github.com/genshin-discord/genshinbot/wiki/GenshinBot-registration-help
 
 ## BotLink
 
