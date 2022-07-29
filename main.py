@@ -19,6 +19,7 @@ from db import *
 from modules.artifact import EnkaArtifact
 from modules.simsimi import SIMChatBot
 from modules.codes import Codes
+from modules.admin import control_center
 
 log.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=log.INFO)
 intents = discord.Intents.default()
@@ -113,27 +114,13 @@ async def on_message(message: discord.Message):
     if isinstance(message.channel, discord.DMChannel) and message.author.id != BOT_ID:
         dm = True
     if mentioned or dm:
-        if message.guild.id not in TEST_GUILDS:
+        if not dm and message.guild.id not in TEST_GUILDS:
             return await message.reply('Due to api limit, your server cannot use chatbot for now.')
         content = message.content.replace(f'<@{BOT_ID}>', '').strip()
         if dm:
-            if message.author.id == BOT_MASTER:
-                data = content.split(':')
-                if len(data) == 3:
-                    server, channel, text = data
-                    server = int(server)
-                    channel = int(channel)
-                    server = await bot.fetch_guild(server)
-                    channel = await server.fetch_channel(channel)
-                    await channel.send(text)
-                    return await message.reply('Message sent')
-                else:
-                    return await message.reply(await global_chat_bot.chat(content))
-            else:
-                return await message.reply('You do not have bot chatting permission')
-        await message.reply(await global_chat_bot.chat(content))
-        # channel = await bot.fetch_channel(message.channel.id)
-        # await channel.send(await global_chat_bot.chat(content))
+            return await control_center(bot, message, global_chat_bot)
+        if not message.author.bot:
+            await message.reply(await global_chat_bot.chat(content))
 
 
 @bot.bridge_command(name="global_abyss_rank", description="Show top 10 abyss record in all servers")
@@ -316,7 +303,7 @@ async def codes(ctx: discord.ApplicationContext):
             description=f"Current redeemable codes",
             color=discord.Color.random()
         )
-#        embed.add_field(name=chr(173), value=chr(173))
+        #        embed.add_field(name=chr(173), value=chr(173))
         for cur, code in enumerate(redeem_codes):
             #            embed.add_field(name=chr(173), value=chr(173))
             embed.add_field(name=chr(173), value=f"**{cur + 1}.{code}**", inline=False)
@@ -373,6 +360,42 @@ async def redeem(ctx: discord.ApplicationContext, code: str):
     return await ctx.followup.send(resp)
 
 
+@bot.bridge_command(name='profile', description="Get your profile data")
+async def refresh(ctx: discord.ApplicationContext):
+    await ctx.defer()
+    embed = discord.Embed(
+        title="Account profile",
+        description="View your current profile in detail",
+        color=discord.Color.random())
+    sess = await create_session()
+    users = await get_discord_users(ctx.user.id, ctx.guild.id, sess=sess)
+
+    if users:
+        for user in users:
+            if user.enabled:
+                abyss = await get_abyss(user.uid, sess)
+                artifact_count = await get_user_artifact_count(user.discord_guild, user.uid, sess)
+                if not abyss:
+                    embed.add_field(name=chr(173),
+                                    value=f"**{user.nickname} {user.uid}**\n"
+                                          f"Good artifacts:{artifact_count}\n",
+                                    inline=False)
+                    continue
+                abyss_rank_server = await get_user_abyss_rank(user.discord_guild, user.uid, sess)
+                abyss_rank_global = await get_user_abyss_rank(None, user.uid, sess)
+                embed.add_field(name=chr(173),
+                                value=f"**{user.nickname} {user.uid}**\n"
+                                      f"Good artifacts:{artifact_count}\n"
+                                      f"Abyss time: {abyss.time}s\n"
+                                      f"Abyss rank(server):{abyss_rank_server + 1}\n"
+                                      f"Abyss rank(global):{abyss_rank_global + 1}\n"
+                                      f"{abyss.team}",
+                                inline=False)
+    else:
+        embed.add_field(name=chr(173), value='**Account not found, add account via /reg first!**')
+    await ctx.followup.send(embed=embed)
+
+
 @bot.bridge_command(name='refresh', description="Refresh data for your accounts(once per 12 hour)")
 async def refresh(ctx: discord.ApplicationContext):
     await ctx.defer()
@@ -384,6 +407,8 @@ async def refresh(ctx: discord.ApplicationContext):
         e = await EnkaArtifact.create()
         for user in users:
             if user.enabled and user.cookie:
+                if not user.last_refresh:
+                    user.last_refresh = 0
                 if time.time() - user.last_refresh > 12 * 3600:
                     cookie = json.loads(user.cookie)
                     client = genshin.Client()
