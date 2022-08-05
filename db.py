@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 
-from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text
+from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update
 from sqlalchemy.engine.url import URL
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 
 from config import *
 from modules.artifact import ArtifactData
+from aiocache import cached
 
 Base = declarative_base()
 
@@ -35,19 +36,10 @@ class User(Base):
         return f'<User(uid:{self.uid}, nickname:{self.nickname}, discord_id:{self.discord_id})>'
 
 
-class Code(Base):
-    __tablename__ = 'codes'
-    code = Column(String)
-    expired = Column(Integer)
-    code_id = Column(Integer, primary_key=True)
-
-
-class CodeLog(Base):
-    __tablename__ = 'codelog'
-    code = Column(String)
-    log_id = Column(Integer, primary_key=True)
-    time = Column(Integer)
-    uid = Column(Integer)
+class Admin(Base):
+    __tablename__ = 'admin'
+    discord_id = Column(String, primary_key=True)
+    level = Column(Integer)
 
 
 def sha256(data):
@@ -65,6 +57,8 @@ class Abyss(Base):
     team = Column(String)
     discord_guild = Column(String)
     time = Column(Integer)
+    star = Column(Integer)
+    battle_count = Column(Integer)
 
     def __repr__(self):
         return f'<Abyss(uid:{self.uid}, guild:{self.discord_guild})>'
@@ -85,12 +79,23 @@ class Artifact(Base):
         return f'https://enka.shinshin.moe/ui/{self.icon}.png'
 
 
-async def create_session(echo=False):
-    engine = create_async_engine(URL.create('mysql+asyncmy', MYSQL_USER, MYSQL_PASS, MYSQL_HOST, MYSQL_PORT, MYSQL_DB),
-                                 echo=echo)
+engine = create_async_engine(URL.create('mysql+asyncmy', MYSQL_USER, MYSQL_PASS, MYSQL_HOST, MYSQL_PORT, MYSQL_DB),
+                             echo=False, pool_recycle=1800, pool_pre_ping=True)
+
+
+async def create_session():
+    global engine
     async_sess = sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
     sess = async_sess()
     return sess
+
+
+async def close_session(sess):
+    global engine
+    await sess.close()
+
+
+#    await engine.dispose()
 
 
 db_sess = None  # asyncio.run(create_session())
@@ -151,31 +156,43 @@ async def create_update_user(uid, cookie, nickname, level, discord_id, discord_g
     if not user:
         user = User()
         user.uid = uid
+        user.last_daily = 0
+        user.last_refresh = 0
+        user.notify = 0
     user.cookie = cookie
     user.nickname = nickname
     user.level = level
     user.discord_id = discord_id
     user.discord_guild = discord_guild
     user.enabled = 1
-
     sess.add(user)
     return await sess.commit()
 
 
-async def create_update_abyss(uid, season, time_used, team, discord_guild, sess=db_sess):
+async def create_update_abyss(uid, season, time_used, team, star, battle_count, discord_guild, sess=db_sess):
     abyss = await fetch_user_abyss(uid, sess=sess)
     if not abyss:
         abyss = Abyss()
         abyss.uid = uid
     else:
-        if time_used > abyss.time and discord_guild == abyss.discord_guild and season == abyss.season:
+        if time_used >= abyss.time and discord_guild == abyss.discord_guild and season == abyss.season:
             return
+        if discord_guild != abyss.discord_guild and time_used >= abyss.time and season == abyss.season:
+            time_used = abyss.time
     abyss.season = season
+    abyss.star = star
+    abyss.battle_count = battle_count
     abyss.time = time_used
     abyss.team = team
     abyss.discord_guild = discord_guild
     sess.add(abyss)
     return await sess.commit()
+
+
+async def update_user_artifact(uid, discord_guild, sess=db_sess):
+    query = update(Artifact).where(Artifact.uid == uid).values(discord_guild=discord_guild)
+    await sess.execute(query)
+    await sess.commit()
 
 
 async def fetch_all_users(sess=db_sess):
@@ -186,30 +203,29 @@ async def fetch_all_users(sess=db_sess):
 
 
 async def update_daily_time(uid, sess=db_sess):
-    user: User = await fetch_user(uid, sess)
-    if user:
-        user.last_daily = int(time.time())
-        sess.add(user)
-        await sess.commit()
+    query = update(User).where(User.uid == uid).values(last_daily=int(time.time()))
+    await sess.execute(query)
+    await sess.commit()
 
 
 async def update_refresh_time(uid, sess=db_sess):
-    user: User = await fetch_user(uid, sess)
-    if user:
-        user.last_refresh = int(time.time())
-        sess.add(user)
-        await sess.commit()
+    query = update(User).where(User.uid == uid).values(last_refresh=int(time.time()))
+    await sess.execute(query)
+    await sess.commit()
 
 
 async def disable_user_cookies(cookie, sess=db_sess):
-    query = select(User).where(User.cookie == cookie)
-    data = await sess.execute(query)
-    users = data.scalars().all()
-    if users:
-        for user in users:
-            user.enabled = 0
-            sess.add(user)
-        await sess.commit()
+    query = update(User).where(User.cookie == cookie).values(enabled=0)
+    await sess.execute(query)
+    await sess.commit()
+    # query = select(User).where(User.cookie == cookie)
+    # data = await sess.execute(query)
+    # users = data.scalars().all()
+    # if users:
+    #     for user in users:
+    #         user.enabled = 0
+    #         sess.add(user)
+    #     await sess.commit()
 
 
 async def get_discord_users(discord_id, discord_guild_id, sess=db_sess):
@@ -238,21 +254,42 @@ async def check_daily_time(uid, sess=db_sess):
 
 
 async def get_current_abyss_season(sess=db_sess):
-    query = select(Abyss).order_by(Abyss.season.desc())
+    query = select(Abyss).order_by(Abyss.season.desc()).limit(1)
     data = await sess.execute(query)
     abyss: Abyss = data.scalars().first()
     return abyss.season
 
 
-async def get_abyss_rank(discord_guild,limit=5, sess=db_sess):
+async def get_abyss_rank(discord_guild, limit=5, sess=db_sess):
     current_season = await get_current_abyss_season(sess)
     if discord_guild:
         query = select(Abyss).where(
-            and_(Abyss.discord_guild == discord_guild, Abyss.season == current_season)).order_by(Abyss.time).limit(limit)
+            and_(Abyss.discord_guild == discord_guild, Abyss.season == current_season)).order_by(Abyss.time).limit(
+            limit)
     else:
         query = select(Abyss).where(Abyss.season == current_season).order_by(Abyss.time).limit(limit)
     data = await sess.execute(query)
     return data
+
+
+async def get_user_abyss_rank(discord_guild, uid, sess=db_sess):
+    current_season = await get_current_abyss_season(sess)
+    user_abyss = await get_abyss(uid, sess)
+    if not user_abyss:
+        return -1
+    if discord_guild:
+        query = select(func.count(Abyss.uid)).where(
+            and_(Abyss.time < user_abyss.time, Abyss.discord_guild == discord_guild, Abyss.season == current_season))
+    else:
+        query = select(func.count(Abyss.uid)).where(and_(Abyss.time < user_abyss.time, Abyss.season == current_season))
+    data = await sess.execute(query)
+    return data.scalars().first()
+
+
+async def get_user_artifact_count(discord_guild, uid, sess=db_sess):
+    query = select(func.count(Artifact.hash)).where(and_(Artifact.discord_guild == discord_guild, Artifact.uid == uid))
+    data = await sess.execute(query)
+    return data.scalars().first()
 
 
 async def get_artifact_rank(discord_guild, sess=db_sess):
@@ -266,4 +303,13 @@ async def get_abyss(uid, sess=db_sess):
     query = select(Abyss).where(and_(Abyss.uid == uid, Abyss.season == current_season))
     data = await sess.execute(query)
     return data.scalars().first()
-# asyncio.run(create_update_user('11123', 'fuck', 0, 0, 0, 0))
+
+
+@cached(ttl=600)
+async def get_admin(discord_id) -> Admin:
+    sess = await create_session()
+    query = select(Admin).where(Admin.discord_id == discord_id)
+    data = await sess.execute(query)
+    data = data.scalars().first()
+    await close_session(sess)
+    return data
