@@ -175,10 +175,13 @@ async def create_update_abyss(uid, season, time_used, team, star, battle_count, 
         abyss = Abyss()
         abyss.uid = uid
     else:
-        if time_used >= abyss.time and discord_guild == abyss.discord_guild and season == abyss.season:
-            return
-        if discord_guild != abyss.discord_guild and time_used >= abyss.time and season == abyss.season:
-            time_used = abyss.time
+        if time_used >= abyss.time and season == abyss.season:
+            if discord_guild == abyss.discord_guild:
+                return
+            else:
+                time_used = abyss.time
+        # if discord_guild != abyss.discord_guild and time_used >= abyss.time and season == abyss.season:
+        #     time_used = abyss.time
     abyss.season = season
     abyss.star = star
     abyss.battle_count = battle_count
@@ -260,14 +263,15 @@ async def get_current_abyss_season(sess=db_sess):
     return abyss.season
 
 
-async def get_abyss_rank(discord_guild, limit=5, sess=db_sess):
+async def get_abyss_rank(discord_guild, limit=5, star_limit=999, sess=db_sess):
     current_season = await get_current_abyss_season(sess)
     if discord_guild:
         query = select(Abyss).where(
-            and_(Abyss.discord_guild == discord_guild, Abyss.season == current_season)).order_by(Abyss.time).limit(
-            limit)
+            and_(Abyss.discord_guild == discord_guild, Abyss.season == current_season,
+                 Abyss.star <= star_limit)).order_by(Abyss.time).limit(limit)
     else:
-        query = select(Abyss).where(Abyss.season == current_season).order_by(Abyss.time).limit(limit)
+        query = select(Abyss).where(and_(Abyss.season == current_season, Abyss.star <= star_limit)).order_by(
+            Abyss.time).limit(limit)
     data = await sess.execute(query)
     return data
 

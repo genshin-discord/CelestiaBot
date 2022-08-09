@@ -93,13 +93,6 @@ class RegModal(discord.ui.Modal):
         await interaction.response.send_message(messages)
 
 
-@bot.event
-async def on_ready():
-    await bot.change_presence(
-        activity=discord.Activity(type=discord.ActivityType.watching, name="holy relics brushing"))
-    log.info(f"{bot.user} Logged in")
-
-
 global_chat_bot: SIMChatBot = None
 
 
@@ -127,44 +120,43 @@ async def on_message(message: discord.Message):
             await message.reply(await global_chat_bot.chat(content))
 
 
-@bot.bridge_command(name="global_abyss_rank", description="Show top 10 abyss record in all servers")
-async def abyss_rank(ctx: discord.ApplicationContext):
+async def global_abyss_embed(star_limit=999):
+    if star_limit == 999:
+        str_limit = 'Unlimited*'
+    else:
+        str_limit = f'Limited-{star_limit}*'
     embed = discord.Embed(
-        title="Global abyss rank",
+        title=f"Global abyss rank [{str_limit}]",
         description="Only counts seconds between 12-3-2 and 12-1-1",
         color=discord.Color.random())
     cur = 1
-    # embed.add_field(name=chr(173), value=chr(173))
     sess = await create_session()
-    for abyss in await get_abyss_rank(None, 10, sess=sess):
+    for abyss in await get_abyss_rank(None, 10, star_limit, sess=sess):
         abyss = abyss[0]
         user = await fetch_user(abyss.uid, sess=sess)
         if user:
             uid = str(user.uid)
             uid = uid[:2] + '\\*' * (len(uid) - 3) + uid[-1:]
             embed.add_field(name=chr(173), value=f"**{cur}.{user.nickname} {uid} {abyss.time}s [{abyss.star}*]**\n"
-                                                 f"{abyss.team}",
-                            inline=False)
+                                                 f"{abyss.team}", inline=False)
             cur += 1
 
     embed.set_footer(text="Only top 10 are shown.")
     await close_session(sess)
-    await ctx.respond(embed=embed)
+    return embed
 
 
-@bot.bridge_command(name="abyss_rank", description="Show top 5 abyss record in current server")
-async def abyss_rank(ctx: discord.ApplicationContext):
+async def abyss_embed(ctx, star_limit=999):
     embed = discord.Embed(
         title="Abyss rank",
         description="Only counts seconds between 12-3-2 and 12-1-1",
         color=discord.Color.random())
     cur = 1
     sess = await create_session()
-    for abyss in await get_abyss_rank(ctx.guild_id, sess=sess):
+    for abyss in await get_abyss_rank(ctx.guild_id, star_limit=star_limit, sess=sess):
         abyss = abyss[0]
         user = await fetch_user(abyss.uid, sess=sess)
         if user:
-            # embed.add_field(name=chr(173), value=chr(173))
             embed.add_field(name=chr(173), value=f"**{cur}.{user.nickname} {user.uid} {abyss.time}s [{abyss.star}*]**\n"
                                                  f"{abyss.team}",
                             inline=False)
@@ -172,7 +164,39 @@ async def abyss_rank(ctx: discord.ApplicationContext):
 
     embed.set_footer(text="Only top 5 in this server are shown.")
     await close_session(sess)
-    await ctx.respond(embed=embed)
+    return embed
+
+
+class AbyssButton(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)  # timeout of the view must be set to None
+
+    @discord.ui.button(label="Unlimited mode", custom_id='unlimited_button', style=discord.ButtonStyle.primary,
+                       disabled=True)
+    async def unlimited_callback(self, button, interaction):
+        for child in self.children:
+            child.disabled = False
+        button.disabled = True
+        embed = await global_abyss_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Limited mode", custom_id='limited_button', style=discord.ButtonStyle.success)
+    async def limited_callback(self, button, interaction):
+        for child in self.children:
+            child.disabled = False
+        button.disabled = True
+        embed = await global_abyss_embed(16)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+@bot.bridge_command(name="global_abyss_rank", description="Show top 10 abyss record in all servers")
+async def global_abyss_rank(ctx: discord.ApplicationContext):
+    await ctx.respond(embed=await global_abyss_embed(), view=AbyssButton())
+
+
+@bot.bridge_command(name="abyss_rank", description="Show top 5 abyss record in current server")
+async def abyss_rank(ctx: discord.ApplicationContext):
+    await ctx.respond(embed=await abyss_embed(ctx))
 
 
 async def plot_artifact_rank(gid, sess):
@@ -432,7 +456,9 @@ async def refresh(ctx: discord.ApplicationContext):
                     await update_refresh_time(user.uid, sess=sess)
                     resp += f'Account {user.nickname}[{user.uid}] refreshed.\n'
                 else:
-                    resp = 'You can only use /refresh once per 12 hours!'
+                    next_refresh = datetime.timedelta(seconds=user.last_refresh + 12 * 3600 - int(time.time()))
+                    resp = 'You can only use /refresh once per 12 hours!\n' \
+                           f'Next /refresh available in {next_refresh}'
         if not resp:
             resp = 'Your accounts are disabled.'
     await close_session(sess)
@@ -626,23 +652,6 @@ async def note_check_user(client: genshin.Client, user: User):
                 await notify_user(user, content)
         else:
             global_notify[user.uid].transformer = False
-
-        # if note.expeditions is not None:
-        #     exp_time = {}
-        #
-        #     for expedition in note.expeditions:
-        #         if expedition.remaining_time.total_seconds() < 3600:
-        #             exp_time[expedition.character.name] = expedition.remaining_time
-        #     if exp_time:
-        #         if not global_notify[user.uid].expeditions:
-        #             global_notify[user.uid].expeditions = True
-        #             content = ''
-        #             for name, remain_time in exp_time.items():
-        #                 content += f'{user.nickname}[{user.uid}], your expedition {name} will be finished in {remain_time}\n'
-        #             await notify_user(user, content)
-        #     else:
-        #         global_notify[user.uid].expeditions = False
-
         if note.remaining_realm_currency_recovery_time is not None \
                 and note.remaining_realm_currency_recovery_time.total_seconds() < 3600:
             if not global_notify[user.uid].realm:
@@ -720,6 +729,14 @@ async def artifact_update():
 @artifact_update.error
 async def artifact_error(e):
     print(e)
+
+
+@bot.event
+async def on_ready():
+    bot.add_view(AbyssButton())
+    await bot.change_presence(
+        activity=discord.Activity(type=discord.ActivityType.watching, name="holy relics brushing"))
+    log.info(f"{bot.user} Logged in")
 
 
 do_daily.start()
