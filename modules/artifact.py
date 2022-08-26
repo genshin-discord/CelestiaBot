@@ -1,4 +1,8 @@
-from enkapy import Enka
+from enkapy import Enka, exception
+from db import *
+from discord.ext import tasks
+from modules.log import log
+import datetime
 
 ArtifactType = {'EQUIP_BRACER': 'Flower',
                 'EQUIP_NECKLACE': 'Feather',
@@ -93,3 +97,50 @@ class EnkaArtifact:
                     ad.type = artifact.flat.equipType
                 ad.score = self.evaluate(ad)
                 yield ad
+
+
+async def artifact_update_user(e: EnkaArtifact, uid, gid):
+    try:
+        sess = await create_session()
+        async for artifact in e.fetch_artifact_user(uid):
+            if artifact.score > 30:
+                await create_artifact(artifact, uid, gid, sess)
+        await close_session(sess)
+    except exception.UIDNotFounded:
+        return
+    except Exception as e:
+        print(e)
+
+
+ArtifactUpdateCache = {}
+
+
+@tasks.loop(hours=1)
+async def artifact_update():
+    global ArtifactUpdateCache
+    log.info('Artifact Update started')
+    sess = await create_session()
+    e = await EnkaArtifact.create()
+    users = {}
+    for user in await fetch_all_users(sess):
+        if user[0].enabled:
+            users[user[0].uid] = user[0].discord_guild
+    await close_session(sess)
+
+    for uid, gid in users.items():
+        now = datetime.datetime.now()
+        if uid in ArtifactUpdateCache:
+            gap = datetime.timedelta(minutes=10)
+            if now - ArtifactUpdateCache[uid] < gap:
+                continue
+            else:
+                ArtifactUpdateCache[uid] = now
+        else:
+            ArtifactUpdateCache[uid] = now
+        log.info(f'Updating artifacts for {uid}')
+        await artifact_update_user(e, uid, gid)
+
+
+@artifact_update.error
+async def artifact_error(e):
+    print(e)

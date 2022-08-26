@@ -1,14 +1,10 @@
-import asyncio
-import datetime
-import logging as log
-import time
 from http.cookies import SimpleCookie
 from tempfile import mktemp
-from typing import Dict
 import discord
-import enkapy
 import genshin
 import genshin.errors
+import asyncio
+import datetime
 from discord.ext import bridge, tasks, commands
 from discord.commands import Option
 import matplotlib.pyplot as plt
@@ -17,12 +13,15 @@ from matplotlib.ticker import MaxNLocator
 import numpy as np
 from constant import *
 from db import *
-from modules.artifact import EnkaArtifact
+from modules.artifact import EnkaArtifact, artifact_update_user, artifact_update
 from modules.simsimi import SIMChatBot
 from modules.codes import Codes
 from modules.admin import control_center
+from modules.log import log
+from modules.daily import do_daily
+from modules.note import note_check_user
+from modules.abyss import abyss_update_user
 
-log.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=log.INFO)
 intents = discord.Intents.default()
 intents.members = True
 loop = asyncio.new_event_loop()
@@ -80,13 +79,16 @@ class RegModal(discord.ui.Modal):
                 uid = acc.uid
                 level = acc.level
                 nick = acc.nickname
-                messages += f'Account {nick}[{uid}] added.\n'
-                await create_update_user(uid, json.dumps(cookies), nick, level, interaction.user.id,
-                                         interaction.guild_id, sess=sess)
-                abyss = await get_abyss(uid, sess=sess)
-                await update_user_artifact(uid, interaction.guild.id, sess=sess)
-                if not abyss:
-                    await abyss_update_user(client, uid, interaction.guild.id, sess=sess)
+                if level > 20:
+                    messages += f'Account {nick}[{uid}] added.\n'
+                    await create_update_user(uid, json.dumps(cookies), nick, level, interaction.user.id,
+                                             interaction.guild_id, sess=sess)
+                    abyss = await get_abyss(uid, sess=sess)
+                    await update_user_artifact(uid, interaction.guild.id, sess=sess)
+                    if not abyss:
+                        await abyss_update_user(client, uid, interaction.guild.id, sess=sess)
+                else:
+                    messages += f'Account {nick}[{uid}] ignored(level < 20).\n'
         await close_session(sess)
         if not messages:
             messages = 'No genshin account detected.'
@@ -291,7 +293,8 @@ async def remove_me(ctx: discord.ApplicationContext):
     await ctx.respond('All your accounts are removed.')
 
 
-@bot.bridge_command(name='notify', description="Change genshin related notifications")
+@bot.bridge_command(name='notify',
+                    description="Notifications setting for resin maxed/transformer available/teapot coins maxed")
 async def notify_change(ctx: discord.ApplicationContext,
                         opt: Option(str, 'On or off', choices=["On", "Off"], required=True)):
     await ctx.defer()
@@ -408,8 +411,8 @@ async def refresh(ctx: discord.ApplicationContext):
                 if not abyss:
                     embed.add_field(name=chr(173),
                                     value=f"**{user.nickname} {user.uid}**\n"
-                                          f"Good artifacts:{artifact_count}\n"
-                                          "No abyss info, try max floor 12 first.",
+                                          f"Good artifacts: **{artifact_count}**\n"
+                                          "No abyss info, try max floor 12 in a **single consecutive run** first.",
                                     inline=False)
                     continue
                 abyss_rank_server = await get_user_abyss_rank(user.discord_guild, user.uid, sess)
@@ -514,162 +517,8 @@ bot.help_command = SupremeHelpCommand()
 
 
 @tasks.loop(hours=1)
-async def do_daily():
-    sess = await create_session()
-    for user in await fetch_all_users(sess):
-        user = user[0]
-        if await check_daily_time(user.uid, sess):
-            if user.enabled:
-                retry, retry_times = 1, 0
-                while retry and retry_times < 5:
-                    cookie = json.loads(user.cookie)
-                    log.info(f'Doing daily for {user.uid}')
-
-                    client = genshin.Client()
-                    client.set_cookies(cookie)
-                    client.default_game = genshin.Game.GENSHIN
-                    client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
-                    client.uid = user.uid
-                    retry = 0
-                    try:
-                        await client.claim_daily_reward(reward=False)
-                        await update_daily_time(user.uid, sess)
-                    except genshin.errors.AlreadyClaimed:
-                        log.info(f'{user.uid} already claimed')
-                    except genshin.errors.InvalidCookies:
-                        discord_user = await bot.fetch_user(user.discord_id)
-                        await discord_user.send(f'Account {user.nickname}[{user.uid}] session expired.{COOKIE_HELP}')
-                        await disable_user_cookies(user.cookie, sess)
-                    except genshin.errors.TooManyRequests:
-                        log.warning(f'Retrying {user.uid}')
-                        await asyncio.sleep(3)
-                        retry = 1
-                        retry_times += 1
-                    except Exception as e:
-                        if 'too many requests' in str(e).lower():
-                            log.warning(f'Retrying {user.uid}')
-                            await asyncio.sleep(3)
-                            retry = 1
-                            retry_times += 1
-                        log.warning(f'Exception in daily {e}')
-                    finally:
-                        await asyncio.sleep(3)
-                if retry_times >= 5:
-                    log.warning(f'Too many retries! {user.nickname}[{user.uid}]')
-
-    await close_session(sess)
-
-
-async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
-    try:
-        log.info(f'Updating abyss info for {uid}')
-        genshin_characters = await client.get_genshin_characters(uid)
-        char_map = {}
-        for c in genshin_characters:
-            char_map[c.id] = c
-        genshin_abyss = await client.get_genshin_spiral_abyss(uid)
-        star = 0
-        if genshin_abyss.floors:
-            last_floor = genshin_abyss.floors[-1]
-            if last_floor.floor == 12 and last_floor.stars == 9:
-                time_used = last_floor.chambers[-1].battles[-1].timestamp - last_floor.chambers[0].battles[0].timestamp
-                time_used = time_used.total_seconds()
-                if time_used > 0:
-                    teams = ''
-                    battle_teams = []
-                    for battle in last_floor.chambers[0].battles:
-                        team_used = []
-                        for character in battle.characters:
-                            name = character.name
-                            if name in name_map:
-                                name = name_map[name]
-                            team_used.append(f'{name}({character.level})')
-                            if character.id in char_map:
-                                if char_map[character.id].rarity == 5:
-                                    star += char_map[character.id].constellation + 1
-                                if char_map[character.id].weapon.rarity == 5:
-                                    star += char_map[character.id].weapon.refinement
-                        battle_teams.append('/'.join(team_used))
-                    teams += "\n".join(battle_teams)
-                    teams = teams.strip()
-                    log.info(f'Update {uid} time {time_used} {teams}')
-                    battle_count = genshin_abyss.total_battles
-                    await create_update_abyss(uid, genshin_abyss.season, time_used, teams, star, battle_count, gid,
-                                              sess=sess)
-    except genshin.errors.GenshinException as e:
-        log.warning(f'Abyss update error {e} for {uid}')
-        return
-
-
-class Notify:
-    resin: bool
-    expeditions: bool
-    realm: bool
-    transformer: bool
-
-    def clear(self):
-        self.resin = self.expeditions = self.realm = self.transformer = False
-
-
-global_notify: Dict[int, Notify] = {}
-
-
-async def notify_user(user: User, content: str):
-    try:
-        discord_user = await bot.fetch_user(int(user.discord_id))
-        if discord_user:
-            await discord_user.send(content)
-    except Exception as e:
-        print(f'Notify user failed {e}')
-        return
-
-
-async def note_check_user(client: genshin.Client, user: User):
-    global global_notify
-    try:
-        if not user.notify:
-            return
-        if user.uid not in global_notify:
-            notify = Notify()
-            notify.clear()
-            global_notify[user.uid] = notify
-        log.info(f'Note check for {user.uid}')
-        note = await client.get_genshin_notes(user.uid)
-        if note.remaining_resin_recovery_time is not None \
-                and note.remaining_resin_recovery_time.total_seconds() < 3600:
-            if not global_notify[user.uid].resin:
-                global_notify[user.uid].resin = True
-                content = f'{user.nickname}[{user.uid}], your resin will be maxed within {note.remaining_resin_recovery_time} ({note.current_resin}/{note.max_resin})'
-                await notify_user(user, content)
-        else:
-            global_notify[user.uid].resin = False
-
-        if note.remaining_transformer_recovery_time is not None \
-                and note.remaining_transformer_recovery_time.total_seconds() < 3600:
-            if not global_notify[user.uid].transformer:
-                global_notify[user.uid].transformer = True
-                content = f'{user.nickname}[{user.uid}], your transformer will be available again within {note.remaining_transformer_recovery_time}'
-                await notify_user(user, content)
-        else:
-            global_notify[user.uid].transformer = False
-        if note.remaining_realm_currency_recovery_time is not None \
-                and note.remaining_realm_currency_recovery_time.total_seconds() < 3600:
-            if not global_notify[user.uid].realm:
-                global_notify[user.uid].realm = True
-                content = f'{user.nickname}[{user.uid}], your realm currency will be maxed within {note.remaining_realm_currency_recovery_time}' \
-                          f', current {note.current_realm_currency}/{note.max_realm_currency}'
-                await notify_user(user, content)
-        else:
-            global_notify[user.uid].realm = False
-
-    except genshin.errors.GenshinException as e:
-        log.warning(f'Note error {e} for {user.uid}')
-        return
-
-
-@tasks.loop(hours=1)
-async def data_update():
-    """Update abyss and check user note"""
+async def work_thread():
+    """Update abyss and check user note, do daily"""
     sess = await create_session()
     for user in await fetch_all_users(sess):
         user = user[0]
@@ -679,56 +528,10 @@ async def data_update():
             client.set_cookies(cookie)
             client.default_game = genshin.Game.GENSHIN
             client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
+            await do_daily(bot, user, sess)
             await abyss_update_user(client, user.uid, user.discord_guild, sess)
-            await note_check_user(client, user)
+            await note_check_user(bot, client, user)
     await close_session(sess)
-
-
-async def artifact_update_user(e: EnkaArtifact, uid, gid):
-    try:
-        sess = await create_session()
-        async for artifact in e.fetch_artifact_user(uid):
-            if artifact.score > 30:
-                await create_artifact(artifact, uid, gid, sess)
-        await close_session(sess)
-    except enkapy.exception.UIDNotFounded:
-        return
-    except Exception as e:
-        print(e)
-
-
-ArtifactUpdateCache = {}
-
-
-@tasks.loop(hours=1)
-async def artifact_update():
-    global ArtifactUpdateCache
-    log.info('Artifact Update started')
-    sess = await create_session()
-    e = await EnkaArtifact.create()
-    users = {}
-    for user in await fetch_all_users(sess):
-        if user[0].enabled:
-            users[user[0].uid] = user[0].discord_guild
-    await close_session(sess)
-
-    for uid, gid in users.items():
-        now = datetime.datetime.now()
-        if uid in ArtifactUpdateCache:
-            gap = datetime.timedelta(minutes=10)
-            if now - ArtifactUpdateCache[uid] < gap:
-                continue
-            else:
-                ArtifactUpdateCache[uid] = now
-        else:
-            ArtifactUpdateCache[uid] = now
-        log.info(f'Updating artifacts for {uid}')
-        await artifact_update_user(e, uid, gid)
-
-
-@artifact_update.error
-async def artifact_error(e):
-    print(e)
 
 
 @bot.event
@@ -739,7 +542,6 @@ async def on_ready():
     log.info(f"{bot.user} Logged in")
 
 
-do_daily.start()
-data_update.start()
+work_thread.start()
 artifact_update.start()
 bot.run(DISCORD_BOT_TOKEN)

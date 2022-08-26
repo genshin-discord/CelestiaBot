@@ -1,10 +1,8 @@
-import asyncio
-import datetime
 import hashlib
 import json
 import time
 
-from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update
+from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update, delete
 from sqlalchemy.engine.url import URL
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -76,7 +74,7 @@ class Artifact(Base):
 
     @property
     def icon_url(self):
-        return f'https://enka.shinshin.moe/ui/{self.icon}.png'
+        return f'https://enka.network/ui/{self.icon}.png'
 
 
 engine = create_async_engine(URL.create('mysql+asyncmy', MYSQL_USER, MYSQL_PASS, MYSQL_HOST, MYSQL_PORT, MYSQL_DB),
@@ -137,6 +135,10 @@ async def remove_user(discord_id, discord_guild_id, sess=db_sess):
     users = await get_discord_users(discord_id, discord_guild_id, sess)
     if users:
         for user in users:
+            query = delete(Abyss).where(Abyss.uid == user.uid)
+            await sess.execute(query)
+            query = delete(Artifact).where(Artifact.uid == user.uid)
+            await sess.execute(query)
             await sess.delete(user)
         await sess.commit()
 
@@ -236,24 +238,6 @@ async def get_discord_users(discord_id, discord_guild_id, sess=db_sess):
     data = await sess.execute(query)
     users = data.scalars().all()
     return users
-
-
-async def check_daily_time(uid, sess=db_sess):
-    user: User = await fetch_user(uid, sess)
-    if user:
-        if user.last_daily:
-            last = datetime.datetime.fromtimestamp(user.last_daily)
-            now = datetime.datetime.now()
-            refresh = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            last_gap = refresh - last
-            last_gap = last_gap.total_seconds()
-            if time.time() - user.last_daily > 24 * 3600 or last_gap > 0:
-                return True
-            else:
-                return False
-        else:
-            return True
-    return False
 
 
 async def get_current_abyss_season(sess=db_sess):

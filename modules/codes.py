@@ -25,7 +25,7 @@ class Codes:
                     code = code.text.strip()
                     if code_regex.match(code):
                         codes.append(code)
-            return codes
+            return list(set(codes))
         except Exception as e:
             print(f'Codes exception {e}')
             return []
