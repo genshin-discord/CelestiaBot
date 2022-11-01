@@ -1,26 +1,30 @@
 from http.cookies import SimpleCookie
 from tempfile import mktemp
 import discord
+import enkapy
 import genshin
 import genshin.errors
 import asyncio
 import datetime
 from discord.ext import bridge, tasks, commands
 from discord.commands import Option
+from discord.utils import escape_markdown
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 from constant import *
 from db import *
-from modules.artifact import EnkaArtifact, artifact_update_user, artifact_update
+from modules.artifact import EnkaArtifact
 from modules.simsimi import SIMChatBot
 from modules.codes import Codes
-from modules.admin import control_center
+# from modules.admin import control_center
 from modules.log import log
 from modules.daily import do_daily
 from modules.note import note_check_user
 from modules.abyss import abyss_update_user
+from modules.useragent import random_ua
+from modules.event import event_update
 
 intents = discord.Intents.default()
 intents.members = True
@@ -66,7 +70,7 @@ class RegModal(discord.ui.Modal):
         try:
             client.region = genshin.Region.OVERSEAS
             accounts = await client.get_game_accounts()
-        except genshin.errors.InvalidCookies:
+        except Exception as e:
             try:
                 client.region = genshin.Region.CHINESE
                 accounts = await client.get_game_accounts()
@@ -83,8 +87,8 @@ class RegModal(discord.ui.Modal):
                     messages += f'Account {nick}[{uid}] added.\n'
                     await create_update_user(uid, json.dumps(cookies), nick, level, interaction.user.id,
                                              interaction.guild_id, sess=sess)
-                    abyss = await get_abyss(uid, sess=sess)
-                    await update_user_artifact(uid, interaction.guild.id, sess=sess)
+                    abyss = await get_user_best_abyss(uid, sess=sess)
+                    # await update_user_artifact(uid, interaction.guild.id, sess=sess)
                     if not abyss:
                         await abyss_update_user(client, uid, interaction.guild.id, sess=sess)
                 else:
@@ -98,28 +102,65 @@ class RegModal(discord.ui.Modal):
 global_chat_bot: SIMChatBot = None
 
 
-@bot.event
-async def on_message(message: discord.Message):
-    global global_chat_bot
-    if not global_chat_bot:
-        global_chat_bot = await SIMChatBot.create()
-    mentioned = False
-    dm = False
-    if message.mentions:
-        for user in message.mentions:
-            if user.id == BOT_ID:
-                mentioned = True
-                break
-    if isinstance(message.channel, discord.DMChannel) and message.author.id != BOT_ID:
-        dm = True
-    if mentioned or dm:
-        if not dm and message.guild and message.guild.id not in TEST_GUILDS:
-            return await message.reply('Due to api limit, your server cannot use chatbot for now.')
-        content = message.content.replace(f'<@{BOT_ID}>', '').strip()
-        if dm:
-            return await control_center(bot, message, global_chat_bot)
-        if not message.author.bot:
-            await message.reply(await global_chat_bot.chat(content))
+# @bot.event
+# async def on_message(message: discord.Message):
+#     global global_chat_bot
+#     if not global_chat_bot:
+#         global_chat_bot = await SIMChatBot.create()
+#     mentioned = False
+#     dm = False
+#     if message.mentions:
+#         for user in message.mentions:
+#             if user.id == BOT_ID:
+#                 mentioned = True
+#                 break
+#     if isinstance(message.channel, discord.DMChannel) and message.author.id != BOT_ID:
+#         dm = True
+#     if mentioned or dm:
+#         if not dm and message.guild and message.guild.id not in TEST_GUILDS:
+#             return await message.reply('Due to api limit, your server cannot use chatbot for now.')
+#         content = message.content.replace(f'<@{BOT_ID}>', '').strip()
+#         if dm:
+#             return await control_center(bot, message, global_chat_bot)
+#         if not message.author.bot:
+#             await message.reply(await global_chat_bot.chat(content))
+
+
+async def event_embed(guild_id=None):
+    sess = await create_session()
+    event = await get_current_event(sess)
+    if not event:
+        embed = discord.Embed(
+            title=f"Event Rank",
+            description="",
+            color=discord.Color.random())
+        embed.add_field(name=chr(173), value='**No event rank for now.**')
+    else:
+        embed = discord.Embed(
+            title=f"Event Rank",
+            description=f"Current event {event.event_id}",
+            color=discord.Color.random())
+
+        if guild_id:
+            limit = 5
+        else:
+            limit = 10
+        cur = 1
+        for event_data in await get_event_rank(guild_id, event.event_id, limit, sess=sess):
+            info: Event = event_data[0]
+            user = await fetch_user(info.uid, sess=sess)
+            if user:
+                uid = str(user.uid)
+                if not guild_id:
+                    uid = uid[:2] + '\\*' * (len(uid) - 3) + uid[-1:]
+                embed.add_field(name=chr(173),
+                                value=f"**{cur}.{escape_markdown(user.nickname)} {uid} {info.score}**\n"
+                                      f"{info.detail}", inline=False)
+                cur += 1
+
+        embed.set_footer(text=f"Only top {limit} are shown.")
+    await close_session(sess)
+    return embed
 
 
 async def global_abyss_embed(star_limit=999):
@@ -139,8 +180,32 @@ async def global_abyss_embed(star_limit=999):
         if user:
             uid = str(user.uid)
             uid = uid[:2] + '\\*' * (len(uid) - 3) + uid[-1:]
-            embed.add_field(name=chr(173), value=f"**{cur}.{user.nickname} {uid} {abyss.time}s [{abyss.star}*]**\n"
-                                                 f"{abyss.team}", inline=False)
+            embed.add_field(name=chr(173),
+                            value=f"**{cur}.{escape_markdown(user.nickname)} {uid} {abyss.time}s [{abyss.star}*]**\n"
+                                  f"{abyss.team}", inline=False)
+            cur += 1
+
+    embed.set_footer(text="Only top 10 are shown.")
+    await close_session(sess)
+    return embed
+
+
+async def fun_abyss_embed():
+    embed = discord.Embed(
+        title=f"Global abyss rank [Fun mode]",
+        description="Current Rules: No 5 star allowed except MC.",
+        color=discord.Color.random())
+    cur = 1
+    sess = await create_session()
+    for abyss in await get_abyss_rank(None, 10, 0, sess=sess):
+        abyss = abyss[0]
+        user = await fetch_user(abyss.uid, sess=sess)
+        if user:
+            uid = str(user.uid)
+            uid = uid[:2] + '\\*' * (len(uid) - 3) + uid[-1:]
+            embed.add_field(name=chr(173),
+                            value=f"**{cur}.{escape_markdown(user.nickname)} {uid} {abyss.time}s [{abyss.star}*]**\n"
+                                  f"{abyss.team}", inline=False)
             cur += 1
 
     embed.set_footer(text="Only top 10 are shown.")
@@ -159,8 +224,9 @@ async def abyss_embed(ctx, star_limit=999):
         abyss = abyss[0]
         user = await fetch_user(abyss.uid, sess=sess)
         if user:
-            embed.add_field(name=chr(173), value=f"**{cur}.{user.nickname} {user.uid} {abyss.time}s [{abyss.star}*]**\n"
-                                                 f"{abyss.team}",
+            embed.add_field(name=chr(173),
+                            value=f"**{cur}.{escape_markdown(user.nickname)} {user.uid} {abyss.time}s [{abyss.star}*]**\n"
+                                  f"{abyss.team}",
                             inline=False)
             cur += 1
 
@@ -174,7 +240,7 @@ class AbyssButton(discord.ui.View):
         super().__init__(timeout=None)  # timeout of the view must be set to None
 
     @discord.ui.button(label="Unlimited mode", custom_id='unlimited_button', style=discord.ButtonStyle.primary,
-                       disabled=True)
+                       disabled=True, emoji='😱')
     async def unlimited_callback(self, button, interaction):
         for child in self.children:
             child.disabled = False
@@ -182,13 +248,48 @@ class AbyssButton(discord.ui.View):
         embed = await global_abyss_embed()
         await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(label="Limited mode", custom_id='limited_button', style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Limited mode", custom_id='limited_button', style=discord.ButtonStyle.success, emoji='😎')
     async def limited_callback(self, button, interaction):
         for child in self.children:
             child.disabled = False
         button.disabled = True
-        embed = await global_abyss_embed(16)
+        embed = await global_abyss_embed(8)
         await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Fun mode", custom_id='fun_button', style=discord.ButtonStyle.secondary, emoji='🤣')
+    async def fun_callback(self, button, interaction):
+        for child in self.children:
+            child.disabled = False
+        button.disabled = True
+        embed = await fun_abyss_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+class EventButton(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)  # timeout of the view must be set to None
+
+    @discord.ui.button(label="Server rank", custom_id='event_server', style=discord.ButtonStyle.primary,
+                       disabled=True)
+    async def server_callback(self, button, interaction: discord.Interaction):
+        for child in self.children:
+            child.disabled = False
+        button.disabled = True
+        embed = await event_embed(interaction.guild_id)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Global rank", custom_id='event_global', style=discord.ButtonStyle.success)
+    async def global_callback(self, button, interaction):
+        for child in self.children:
+            child.disabled = False
+        button.disabled = True
+        embed = await event_embed(None)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+@bot.bridge_command(name="event_rank", description="Show top event records")
+async def event_rank(ctx: discord.ApplicationContext):
+    await ctx.respond(embed=await event_embed(ctx.guild_id), view=EventButton())
 
 
 @bot.bridge_command(name="global_abyss_rank", description="Show top 10 abyss record in all servers")
@@ -369,15 +470,15 @@ async def redeem(ctx: discord.ApplicationContext, code: str):
                 client.set_cookies(cookie)
                 client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
                 if client.region == genshin.Region.CHINESE:
-                    resp += f'Redeem failed {user.nickname}[{user.uid}], CN server not supported\n'
+                    resp += f'Redeem failed {escape_markdown(user.nickname)}[{user.uid}], CN server not supported\n'
                     continue
                 client.default_game = genshin.Game.GENSHIN
                 try:
                     await client.redeem_code(code, uid=user.uid)
-                    resp += f'Redeem success {user.nickname}[{user.uid}]\n'
+                    resp += f'Redeem success {escape_markdown(user.nickname)}[{user.uid}]\n'
                     await asyncio.sleep(3)
                 except genshin.errors.RedemptionClaimed:
-                    resp += f'Redeem already claimed {user.nickname}[{user.uid}]\n'
+                    resp += f'Redeem already claimed {escape_markdown(user.nickname)}[{user.uid}]\n'
                 except genshin.errors.RedemptionInvalid:
                     resp = 'Code invalid'
                     break
@@ -385,7 +486,7 @@ async def redeem(ctx: discord.ApplicationContext, code: str):
                     await asyncio.sleep(3)
                     continue
                 except genshin.errors.GenshinException as e:
-                    resp += f'Redeem failed {user.nickname}[{user.uid}], cookies or code invalid\n'
+                    resp += f'Redeem failed {escape_markdown(user.nickname)}[{user.uid}], cookies or code invalid\n'
                     print(e)
         if not resp:
             resp = 'Your accounts are disabled.'
@@ -406,11 +507,11 @@ async def refresh(ctx: discord.ApplicationContext):
     if users:
         for user in users:
             if user.enabled:
-                abyss = await get_abyss(user.uid, sess)
+                abyss = await get_user_best_abyss(user.uid, sess)
                 artifact_count = await get_user_artifact_count(user.discord_guild, user.uid, sess)
                 if not abyss:
                     embed.add_field(name=chr(173),
-                                    value=f"**{user.nickname} {user.uid}**\n"
+                                    value=f"**{escape_markdown(user.nickname)} {user.uid}**\n"
                                           f"Good artifacts: **{artifact_count}**\n"
                                           "No abyss info, try max floor 12 in a **single consecutive run** first.",
                                     inline=False)
@@ -418,13 +519,13 @@ async def refresh(ctx: discord.ApplicationContext):
                 abyss_rank_server = await get_user_abyss_rank(user.discord_guild, user.uid, sess)
                 abyss_rank_global = await get_user_abyss_rank(None, user.uid, sess)
                 embed.add_field(name=chr(173),
-                                value=f"**{user.nickname} {user.uid}**\n"
+                                value=f"**{escape_markdown(user.nickname)} {user.uid}**\n"
                                       f"Good artifacts: **{artifact_count}**\n"
                                       f"Abyss time: **{abyss.time}s**\n"
                                       f"Abyss rank(server): **{abyss_rank_server + 1}**\n"
                                       f"Abyss rank(global): **{abyss_rank_global + 1}**\n"
                                       f"Abyss battle count: **{abyss.battle_count}**\n"
-                                      f"Abyss team stars: **{abyss.star}**\n"
+                                      f"Abyss team 5* count: **{abyss.star}**\n"
                                       f"{abyss.team}",
                                 inline=False)
                 embed.set_footer(text='Battle count updates only if you get better records.')
@@ -455,9 +556,10 @@ async def refresh(ctx: discord.ApplicationContext):
                     client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
                     client.default_game = genshin.Game.GENSHIN
                     await abyss_update_user(client, user.uid, user.discord_guild, sess=sess)
-                    await artifact_update_user(e, user.uid, user.discord_guild)
+                    await artifact_update_user(e, user.uid, user.discord_guild, sess)
                     await update_refresh_time(user.uid, sess=sess)
-                    resp += f'Account {user.nickname}[{user.uid}] refreshed.\n'
+                    await event_update(client, user.uid, user.discord_guild, sess)
+                    resp += f'Account {escape_markdown(user.nickname)}[{user.uid}] refreshed.\n'
                 else:
                     next_refresh = datetime.timedelta(seconds=user.last_refresh + 12 * 3600 - int(time.time()))
                     resp = 'You can only use /refresh once per 12 hours!\n' \
@@ -516,9 +618,23 @@ class SupremeHelpCommand(commands.HelpCommand):
 bot.help_command = SupremeHelpCommand()
 
 
+async def artifact_update_user(e: EnkaArtifact, uid, gid, sess):
+    try:
+        # sess = await create_session()
+        async for artifact in e.fetch_artifact_user(uid):
+            if artifact.score > 30:
+                await create_artifact(artifact, uid, gid, sess)
+        # await close_session(sess)
+    except enkapy.exception.UIDNotFounded:
+        return
+    except Exception as e:
+        print(e)
+
+
 @tasks.loop(hours=1)
 async def work_thread():
-    """Update abyss and check user note, do daily"""
+    """Update abyss and check user note, do daily, artifact update"""
+    e = await EnkaArtifact.create()
     sess = await create_session()
     for user in await fetch_all_users(sess):
         user = user[0]
@@ -528,20 +644,38 @@ async def work_thread():
             client.set_cookies(cookie)
             client.default_game = genshin.Game.GENSHIN
             client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
-            await do_daily(bot, user, sess)
-            await abyss_update_user(client, user.uid, user.discord_guild, sess)
-            await note_check_user(bot, client, user)
+            client.lang = 'en-us'
+            client.USER_AGENT = await random_ua()
+            try:
+                await do_daily(bot, user, sess)
+                await abyss_update_user(client, user.uid, user.discord_guild, sess)
+                await note_check_user(bot, client, user)
+                log.info(f'Updating events for {user.uid}')
+                await event_update(client, user.uid, user.discord_guild, sess)
+                log.info(f'Updating artifacts for {user.uid}')
+                await artifact_update_user(e, user.uid, user.discord_guild, sess)
+            except genshin.errors.InvalidCookies:
+                try:
+                    await disable_user_cookies(user.cookie, sess)
+                    discord_user = await bot.fetch_user(int(user.discord_id))
+                    await discord_user.send(
+                        f'Account {user.nickname}[{user.uid}] session expired.{COOKIE_HELP}')
+                except discord.Forbidden:
+                    break
+            except genshin.errors.GenshinException:
+                log.warning(f'Error work thread in {user.uid}')
     await close_session(sess)
 
 
 @bot.event
 async def on_ready():
     bot.add_view(AbyssButton())
+    bot.add_view(EventButton())
     await bot.change_presence(
         activity=discord.Activity(type=discord.ActivityType.watching, name="holy relics brushing"))
     log.info(f"{bot.user} Logged in")
 
 
 work_thread.start()
-artifact_update.start()
+# artifact_update.start()
 bot.run(DISCORD_BOT_TOKEN)

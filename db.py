@@ -3,6 +3,7 @@ import json
 import time
 
 from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update, delete
+from sqlalchemy.dialects.mysql.dml import insert
 from sqlalchemy.engine.url import URL
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -16,6 +17,8 @@ from aiocache import cached
 
 Base = declarative_base()
 
+
+# SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));
 
 class User(Base):
     __tablename__ = 'users'
@@ -32,6 +35,23 @@ class User(Base):
 
     def __repr__(self):
         return f'<User(uid:{self.uid}, nickname:{self.nickname}, discord_id:{self.discord_id})>'
+
+
+class Event(Base):
+    __tablename__ = 'event'
+    uid = Column(Integer, primary_key=True)
+    event_id = Column(String, primary_key=True)
+    score = Column(Integer)
+    detail = Column(String)
+    discord_guild = Column(String)
+
+
+class EventConfig(Base):
+    __tablename__ = 'event_config'
+    event_id = Column(String, primary_key=True)
+    enabled = Column(Integer)
+    record_list_key = Column(String)
+    score_key = Column(String)
 
 
 class Admin(Base):
@@ -54,8 +74,8 @@ class Abyss(Base):
     season = Column(Integer)
     team = Column(String)
     discord_guild = Column(String)
-    time = Column(Integer)
-    star = Column(Integer)
+    time = Column(Integer, primary_key=True)
+    star = Column(Integer, primary_key=True)
     battle_count = Column(Integer)
 
     def __repr__(self):
@@ -173,24 +193,51 @@ async def create_update_user(uid, cookie, nickname, level, discord_id, discord_g
 
 async def create_update_abyss(uid, season, time_used, team, star, battle_count, discord_guild, sess=db_sess):
     abyss = await fetch_user_abyss(uid, sess=sess)
-    if not abyss:
-        abyss = Abyss()
-        abyss.uid = uid
-    else:
-        if time_used >= abyss.time and season == abyss.season:
-            if discord_guild == abyss.discord_guild:
-                return
-            else:
-                time_used = abyss.time
-        # if discord_guild != abyss.discord_guild and time_used >= abyss.time and season == abyss.season:
-        #     time_used = abyss.time
-    abyss.season = season
-    abyss.star = star
-    abyss.battle_count = battle_count
-    abyss.time = time_used
-    abyss.team = team
-    abyss.discord_guild = discord_guild
-    sess.add(abyss)
+    if abyss and abyss.discord_guild != discord_guild:
+        update_guild = update(Abyss).where(Abyss.uid == uid).values(discord_guild=discord_guild)
+        await sess.execute(update_guild)
+        await sess.commit()
+    insert_stmt = insert(Abyss).values(
+        uid=uid,
+        season=season,
+        time=time_used,
+        team=team,
+        star=star,
+        discord_guild=discord_guild,
+        battle_count=battle_count
+    )
+    final_stmt = insert_stmt.on_duplicate_key_update(
+        season=insert_stmt.inserted.season,
+        team=insert_stmt.inserted.team,
+        battle_count=insert_stmt.inserted.battle_count,
+        discord_guild=insert_stmt.inserted.discord_guild,
+        # uid=insert_stmt.inserted.uid,
+        # time=insert_stmt.inserted.time,
+        # star=insert_stmt.inserted.star
+    )
+    await sess.execute(final_stmt)
+
+    # if not abyss:
+    #     abyss = Abyss()
+    #     abyss.uid = uid
+    # else:
+    #     if time_used >= abyss.time and season == abyss.season:
+    #         if discord_guild == abyss.discord_guild:
+    #             if star >= abyss.star or time_used > abyss.time:
+    #                 return
+    #         else:
+    #             time_used = abyss.time
+    #             team = abyss.team
+    #             star = abyss.star
+    #     # if discord_guild != abyss.discord_guild and time_used >= abyss.time and season == abyss.season:
+    #     #     time_used = abyss.time
+    # abyss.season = season
+    # abyss.star = star
+    # abyss.battle_count = battle_count
+    # abyss.time = time_used
+    # abyss.team = team
+    # abyss.discord_guild = discord_guild
+    # sess.add(abyss)
     return await sess.commit()
 
 
@@ -233,6 +280,75 @@ async def disable_user_cookies(cookie, sess=db_sess):
     #     await sess.commit()
 
 
+async def get_current_event(sess=db_sess):
+    query = select(EventConfig).where(EventConfig.enabled == 1)
+    data = await sess.execute(query)
+    event: EventConfig = data.scalars().first()
+    return event
+
+
+async def get_event(event_id, sess=db_sess):
+    query = select(EventConfig).where(EventConfig.event_id == event_id)
+    data = await sess.execute(query)
+    event: EventConfig = data.scalars().first()
+    return event
+
+
+async def add_event(event_id, list_key, score_key, sess=db_sess):
+    e = EventConfig()
+    e.event_id = event_id
+    e.score_key = score_key
+    e.record_list_key = list_key
+    e.enabled = False
+    sess.add(e)
+    return await sess.commit()
+
+
+async def disable_all_event(sess=db_sess):
+    query = update(EventConfig).values(enabled=0)
+    await sess.execute(query)
+    await sess.commit()
+
+
+async def enable_event(event_id, sess=db_sess):
+    query = update(EventConfig).where(EventConfig.event_id == event_id).values(enabled=1)
+    await sess.execute(query)
+    return await sess.commit()
+
+
+async def create_update_event(event_id, uid, discord_guild, score, detail, sess=db_sess):
+    query = select(Event).where(and_(Event.uid == uid, Event.event_id == event_id))
+    data = await sess.execute(query)
+    event: Event = data.scalars().first()
+    if not event:
+        event = Event()
+        event.event_id = event_id
+        event.uid = uid
+        event.score = score
+        event.detail = detail
+        event.discord_guild = discord_guild
+    else:
+        if score > event.score:
+            event.score = score
+            event.detail = detail
+            event.discord_guild = discord_guild
+        else:
+            return
+    sess.add(event)
+    return await sess.commit()
+
+
+async def get_event_rank(discord_guild, event_id, limit=5, sess=db_sess):
+    if discord_guild:
+        query = select(Event).where(
+            and_(Event.discord_guild == discord_guild, Event.event_id == event_id)).order_by(Event.score.desc()).limit(
+            limit)
+    else:
+        query = select(Event).where(Event.event_id == event_id).order_by(Event.score.desc()).limit(limit)
+    data = await sess.execute(query)
+    return data
+
+
 async def get_discord_users(discord_id, discord_guild_id, sess=db_sess):
     query = select(User).where(and_(User.discord_id == discord_id, User.discord_guild == discord_guild_id))
     data = await sess.execute(query)
@@ -252,17 +368,17 @@ async def get_abyss_rank(discord_guild, limit=5, star_limit=999, sess=db_sess):
     if discord_guild:
         query = select(Abyss).where(
             and_(Abyss.discord_guild == discord_guild, Abyss.season == current_season,
-                 Abyss.star <= star_limit)).order_by(Abyss.time).limit(limit)
+                 Abyss.star <= star_limit)).group_by(Abyss.uid).order_by(Abyss.time).limit(limit)
     else:
         query = select(Abyss).where(and_(Abyss.season == current_season, Abyss.star <= star_limit)).order_by(
-            Abyss.time).limit(limit)
+            Abyss.time).group_by(Abyss.uid).limit(limit)
     data = await sess.execute(query)
     return data
 
 
 async def get_user_abyss_rank(discord_guild, uid, sess=db_sess):
     current_season = await get_current_abyss_season(sess)
-    user_abyss = await get_abyss(uid, sess)
+    user_abyss = await get_user_best_abyss(uid, sess)
     if not user_abyss:
         return -1
     if discord_guild:
@@ -286,9 +402,20 @@ async def get_artifact_rank(discord_guild, sess=db_sess):
     return data
 
 
-async def get_abyss(uid, sess=db_sess):
+async def get_user_best_abyss(uid, sess=db_sess):
     current_season = await get_current_abyss_season(sess=sess)
-    query = select(Abyss).where(and_(Abyss.uid == uid, Abyss.season == current_season))
+    query = select(Abyss).where(and_(Abyss.uid == uid, Abyss.season == current_season)).order_by(Abyss.time).limit(1)
+    data = await sess.execute(query)
+    return data.scalars().first()
+
+
+async def get_user_limited_abyss(uid, star=None, sess=db_sess):
+    if not star:
+        return await get_user_best_abyss(uid, sess)
+
+    current_season = await get_current_abyss_season(sess=sess)
+    query = select(Abyss).where(and_(Abyss.uid == uid, Abyss.season == current_season, Abyss.star <= star)).order_by(
+        Abyss.time).limit(1)
     data = await sess.execute(query)
     return data.scalars().first()
 

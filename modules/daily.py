@@ -3,6 +3,7 @@ import genshin
 import discord
 from constant import *
 from modules.log import log
+from modules.useragent import random_ua
 import asyncio
 import datetime
 
@@ -32,6 +33,8 @@ async def do_daily_user(user: User, reward=False):
         client.default_game = genshin.Game.GENSHIN
         client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
         client.uid = user.uid
+        client.USER_AGENT = await random_ua()
+        client.USER_AGENT = f'{client.USER_AGENT} miHoYoBBS/2.34.1'
         if reward:
             return await client.claim_daily_reward()
         else:

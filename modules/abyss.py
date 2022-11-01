@@ -7,10 +7,6 @@ from modules.log import log
 async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
     try:
         log.info(f'Updating abyss info for {uid}')
-        genshin_characters = await client.get_genshin_characters(uid)
-        char_map = {}
-        for c in genshin_characters:
-            char_map[c.id] = c
         genshin_abyss = await client.get_genshin_spiral_abyss(uid)
         star = 0
         if genshin_abyss.floors:
@@ -21,6 +17,10 @@ async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
                 if time_used > 0:
                     teams = ''
                     battle_teams = []
+                    genshin_characters = await client.get_genshin_characters(uid)
+                    char_map = {}
+                    for c in genshin_characters:
+                        char_map[c.id] = c
                     for battle in last_floor.chambers[0].battles:
                         team_used = []
                         for character in battle.characters:
@@ -29,7 +29,7 @@ async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
                                 name = name_map[name]
                             team_used.append(f'{name}({character.level})')
                             if character.id in char_map:
-                                if char_map[character.id].rarity == 5:
+                                if char_map[character.id].rarity == 5 and character.id != 10000007:
                                     star += char_map[character.id].constellation + 1
                                 if char_map[character.id].weapon.rarity == 5:
                                     star += char_map[character.id].weapon.refinement
