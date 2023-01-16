@@ -2,7 +2,7 @@ import hashlib
 import json
 import time
 
-from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update, delete
+from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update, delete, distinct, or_
 from sqlalchemy.dialects.mysql.dml import insert
 from sqlalchemy.engine.url import URL
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.future import select
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import text
 
 from config import *
 from modules.artifact import ArtifactData
@@ -31,7 +32,11 @@ class User(Base):
     last_daily = Column(Integer)
     enabled = Column(Integer)
     last_refresh = Column(Integer)
+    last_redeem = Column(Integer)
     notify = Column(Integer)
+    gold = Column(Integer)
+    silver = Column(Integer)
+    bronze = Column(Integer)
 
     def __repr__(self):
         return f'<User(uid:{self.uid}, nickname:{self.nickname}, discord_id:{self.discord_id})>'
@@ -52,6 +57,7 @@ class EventConfig(Base):
     enabled = Column(Integer)
     record_list_key = Column(String)
     score_key = Column(String)
+    sort = Column(Integer)
 
 
 class Admin(Base):
@@ -105,6 +111,8 @@ async def create_session():
     global engine
     async_sess = sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
     sess = async_sess()
+    set_mode = text('''SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));''')
+    await sess.execute(set_mode)
     return sess
 
 
@@ -181,14 +189,23 @@ async def create_update_user(uid, cookie, nickname, level, discord_id, discord_g
         user.last_daily = 0
         user.last_refresh = 0
         user.notify = 0
+        user.last_redeem = 0
     user.cookie = cookie
     user.nickname = nickname
     user.level = level
     user.discord_id = discord_id
     user.discord_guild = discord_guild
     user.enabled = 1
+
     sess.add(user)
     return await sess.commit()
+
+
+async def check_user_abyss_exists(uid, season, time_used, team, sess=db_sess):
+    query = select(Abyss).where(
+        and_(Abyss.uid == uid, Abyss.season == season, Abyss.team == team, Abyss.time == time_used))
+    data = await sess.execute(query)
+    return data.scalars().first()
 
 
 async def create_update_abyss(uid, season, time_used, team, star, battle_count, discord_guild, sess=db_sess):
@@ -197,6 +214,11 @@ async def create_update_abyss(uid, season, time_used, team, star, battle_count, 
         update_guild = update(Abyss).where(Abyss.uid == uid).values(discord_guild=discord_guild)
         await sess.execute(update_guild)
         await sess.commit()
+    if await check_user_abyss_exists(uid, season, time_used, team, sess=sess):
+        return
+    current_season = await get_current_abyss_season(sess)
+    if season > current_season:
+        await season_update(current_season, [8, 16], sess=sess)
     insert_stmt = insert(Abyss).values(
         uid=uid,
         season=season,
@@ -376,16 +398,25 @@ async def get_abyss_rank(discord_guild, limit=5, star_limit=999, sess=db_sess):
     return data
 
 
+async def get_current_season_full_abyss(sess=db_sess):
+    current_season = await get_current_abyss_season(sess)
+    query = select(Abyss).where(and_(Abyss.season == current_season)).order_by(Abyss.time)
+    data = await sess.execute(query)
+    return data
+
+
 async def get_user_abyss_rank(discord_guild, uid, sess=db_sess):
     current_season = await get_current_abyss_season(sess)
     user_abyss = await get_user_best_abyss(uid, sess)
     if not user_abyss:
         return -1
     if discord_guild:
-        query = select(func.count(Abyss.uid)).where(
-            and_(Abyss.time < user_abyss.time, Abyss.discord_guild == discord_guild, Abyss.season == current_season))
+        query = select(func.count(distinct(Abyss.uid))).where(
+            and_(Abyss.time < user_abyss.time, Abyss.discord_guild == discord_guild,
+                 Abyss.season == current_season))
     else:
-        query = select(func.count(Abyss.uid)).where(and_(Abyss.time < user_abyss.time, Abyss.season == current_season))
+        query = select(func.count(distinct(Abyss.uid))).where(
+            and_(Abyss.time < user_abyss.time, Abyss.season == current_season))
     data = await sess.execute(query)
     return data.scalars().first()
 
@@ -418,6 +449,53 @@ async def get_user_limited_abyss(uid, star=None, sess=db_sess):
         Abyss.time).limit(1)
     data = await sess.execute(query)
     return data.scalars().first()
+
+
+async def get_abyss_hof(sess=db_sess):
+    query = select(User).where(or_(User.gold > 0,
+                                   User.silver > 0,
+                                   User.bronze > 0)).order_by(desc(User.gold),
+                                                              desc(User.silver),
+                                                              desc(User.bronze)).limit(10)
+    data = await sess.execute(query)
+    return data.scalars()
+
+
+async def update_user_medal(uid, place, sess=db_sess):
+    if place == 0:
+        query = update(User).values(gold=User.gold + 1).where(User.uid == uid)
+    elif place == 1:
+        query = update(User).values(silver=User.silver + 1).where(User.uid == uid)
+    elif place == 2:
+        query = update(User).values(bronze=User.bronze + 1).where(User.uid == uid)
+    else:
+        return
+    await sess.execute(query)
+
+
+async def season_medal_update(current_season, star_limit=999, sess=db_sess):
+    query = select(Abyss).where(and_(Abyss.season == current_season, Abyss.star <= star_limit)).order_by(
+        Abyss.time).group_by(
+        Abyss.uid).limit(3)
+    idx = 0
+    for abyss in await sess.execute(query):
+        abyss = abyss[0]
+        await update_user_medal(abyss.uid, idx, sess)
+        idx += 1
+    await sess.commit()
+
+
+async def season_update(season, limited=[8, 16], fun=True, sess=db_sess):
+    for limit in limited:
+        await season_medal_update(season, limit, sess)
+    await season_medal_update(season, 999, sess)
+    if fun:
+        idx = 0
+        from modules.abyss import fun_abyss_filter
+        for abyss in await fun_abyss_filter(sess=sess):
+            await update_user_medal(abyss.uid, idx, sess)
+            idx += 1
+    await sess.commit()
 
 
 @cached(ttl=600)

@@ -14,8 +14,8 @@ class APIBase:
         self.base_url = base
 
     @classmethod
-    async def create(cls, base):
-        timeout = aiohttp.ClientTimeout(total=cls.timeout)
+    async def create(cls, base, timeout=5):
+        timeout = aiohttp.ClientTimeout(total=timeout)
         s = aiohttp.ClientSession(timeout=timeout)
         return cls(s, base)
 
@@ -42,7 +42,7 @@ class APIBase:
                 return result
             except asyncio.exceptions.TimeoutError:
                 fail += 1
-                timeout = aiohttp.ClientTimeout(total=self.timeout * fail)
+                kwargs['timeout'] = aiohttp.ClientTimeout(total=self.timeout * fail)
         return None
 
     async def get(self, *args, **kwargs):

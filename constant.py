@@ -15,4 +15,7 @@ name_map = {'神里绫华': 'Kamisato Ayaka', '迪卢克': 'Diluc', '温迪': 'V
             '北斗': 'Beidou', '辛焱': 'Xinyan', '埃洛伊': 'Aloy', '早柚': 'Sayu', '托马': 'Thoma', '云堇': 'Yun Jin',
             '久岐忍': 'Kuki Shinobu', '鹿野院平藏': 'Heizou', '神里绫人': 'Ayato', '优菈': 'Eula', '魈': 'Xiao',
             '阿贝多': 'Albedo', '柯莱': 'Collei', '多莉': 'Dori', '提纳里': 'Tighnari', '赛诺': 'Cyno', '妮露': 'Nilou',
-            '坎蒂丝': 'Candace', '纳西妲': 'Nahida', '莱依拉': 'Layla'}
+            '坎蒂丝': 'Candace', '纳西妲': 'Nahida', '莱依拉': 'Layla', '流浪者': 'Wanderer', '珐露珊': 'Faruzan', '瑶瑶': 'Yaoyao',
+            '艾尔海森': 'Alhaitham'}
+
+rank_emoji = {1: '🥇', 2: '🥈', 3: '🥉'}

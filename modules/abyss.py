@@ -1,6 +1,9 @@
 from db import *
 import genshin
+import globals
 from constant import *
+import re
+from modules.genshin_data import GenshinData
 from modules.log import log
 
 
@@ -29,7 +32,7 @@ async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
                                 name = name_map[name]
                             team_used.append(f'{name}({character.level})')
                             if character.id in char_map:
-                                if char_map[character.id].rarity == 5 and character.id != 10000007:
+                                if char_map[character.id].rarity == 5 and character.id not in [10000005, 10000007]:
                                     star += char_map[character.id].constellation + 1
                                 if char_map[character.id].weapon.rarity == 5:
                                     star += char_map[character.id].weapon.refinement
@@ -43,3 +46,51 @@ async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
     except genshin.errors.GenshinException as e:
         log.warning(f'Abyss update error {e} for {uid}')
         return
+
+
+async def fun_abyss_check(abyss: Abyss) -> bool:
+    name_replace = re.compile(r'\(.+?\)')
+    for team in abyss.team.split('\n'):
+        team_gender = set()
+        for char in team.split('/'):
+            char = name_replace.sub('', char)
+            char_data = globals.global_genshin_data[char]
+            if char_data and 'gender' in char_data:
+                team_gender.add(char_data['gender'])
+        if len(team_gender) != 1:
+            return False
+    return True
+
+
+async def fun_abyss_check_60(abyss: Abyss) -> bool:
+    name_replace = re.compile(r'\(.+?\)')
+    for team in abyss.team.split('\n'):
+        for char in team.split('/'):
+            char = name_replace.sub('', char)
+            char_data = globals.global_genshin_data[char]
+            if char_data:
+                if char_data['nation'] != 'Inazuma':
+                    return False
+    return True
+
+
+async def fun_abyss_filter(limit=10, sess=None):
+    if not globals.global_genshin_data:
+        globals.global_genshin_data = await GenshinData.create()
+    result = {}
+    for abyss in await get_current_season_full_abyss(sess=sess):
+        abyss = abyss[0]
+        if await fun_abyss_check(abyss):
+            if abyss.uid in result:
+                if result[abyss.uid].time > abyss.time:
+                    result[abyss.uid] = abyss
+            else:
+                result[abyss.uid] = abyss
+    final = []
+    total = 0
+    for _, x in sorted(result.items(), key=lambda a: a[1].time):
+        if total >= limit:
+            break
+        final.append(x)
+        total += 1
+    return final
