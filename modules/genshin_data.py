@@ -31,8 +31,12 @@ class GenshinDataBackend:
         full_path = os.path.join(self.path, name)
         json_data = os.path.join(full_path, 'en.json')
         if os.path.exists(json_data):
-            with open(json_data, 'rb') as f:
-                return json.load(f)
+            try:
+                with open(json_data, 'rb') as f:
+                    return json.load(f)
+            except UnicodeError as e:
+                print(f'Error in loading {json_data}')
+                return None
         # j = await self.s.get(f'characters/{name}')
         # return await j.json()
 

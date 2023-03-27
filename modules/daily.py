@@ -35,6 +35,8 @@ async def do_daily_user(user: User):
         client.set_cookies(cookie)
         client.default_game = genshin.Game.GENSHIN
         client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
+        if client.region == genshin.Region.CHINESE:
+            return
         client.uid = user.uid
         client.USER_AGENT = await random_ua()
         if not client.hoyolab_id:

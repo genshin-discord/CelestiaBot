@@ -31,6 +31,7 @@ ArtifactPropText = {"FIGHT_PROP_BASE_ATTACK": "Base ATK",
                     "FIGHT_PROP_FIRE_ADD_HURT": "Pyro DMG Bonus",
                     "FIGHT_PROP_ELEC_ADD_HURT": "Electro DMG Bonus",
                     "FIGHT_PROP_WATER_ADD_HURT": "Hydro DMG Bonus",
+                    "FIGHT_PROP_DENDRO_ADD_HURT": "Dendro DMG Bonus",
                     "FIGHT_PROP_WIND_ADD_HURT": "Anemo DMG Bonus",
                     "FIGHT_PROP_ICE_ADD_HURT": "Cryo DMG Bonus",
                     "FIGHT_PROP_ROCK_ADD_HURT": "Geo DMG Bonus"}

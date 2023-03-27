@@ -2,7 +2,7 @@ import hashlib
 import json
 import time
 
-from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update, delete, distinct, or_
+from sqlalchemy import Column, Integer, String, and_, Float, desc, func, text, update, delete, distinct, or_, JSON
 from sqlalchemy.dialects.mysql.dml import insert
 from sqlalchemy.engine.url import URL
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,6 +83,7 @@ class Abyss(Base):
     time = Column(Integer, primary_key=True)
     star = Column(Integer, primary_key=True)
     battle_count = Column(Integer)
+    info = Column(JSON)
 
     def __repr__(self):
         return f'<Abyss(uid:{self.uid}, guild:{self.discord_guild})>'
@@ -208,7 +209,7 @@ async def check_user_abyss_exists(uid, season, time_used, team, sess=db_sess):
     return data.scalars().first()
 
 
-async def create_update_abyss(uid, season, time_used, team, star, battle_count, discord_guild, sess=db_sess):
+async def create_update_abyss(uid, season, time_used, team, star, battle_count, discord_guild, info, sess=db_sess):
     abyss = await fetch_user_abyss(uid, sess=sess)
     if abyss and abyss.discord_guild != discord_guild:
         update_guild = update(Abyss).where(Abyss.uid == uid).values(discord_guild=discord_guild)
@@ -224,6 +225,7 @@ async def create_update_abyss(uid, season, time_used, team, star, battle_count, 
         season=season,
         time=time_used,
         team=team,
+        info=info,
         star=star,
         discord_guild=discord_guild,
         battle_count=battle_count
@@ -231,6 +233,7 @@ async def create_update_abyss(uid, season, time_used, team, star, battle_count, 
     final_stmt = insert_stmt.on_duplicate_key_update(
         season=insert_stmt.inserted.season,
         team=insert_stmt.inserted.team,
+        info=insert_stmt.inserted.info,
         battle_count=insert_stmt.inserted.battle_count,
         discord_guild=insert_stmt.inserted.discord_guild,
         # uid=insert_stmt.inserted.uid,

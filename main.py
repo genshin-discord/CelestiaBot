@@ -18,7 +18,6 @@ import globals
 from db import *
 from modules.artifact import EnkaArtifact
 from modules.codes import Codes
-from modules.admin import control_center
 from modules.log import log
 from modules.daily import do_daily
 from modules.note import note_check_user
@@ -33,7 +32,24 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 # bot = bridge.Bot(intents=intents, command_prefix='/', debug_guilds=TEST_GUILDS)
 
-bot = bridge.Bot(intents=intents, command_prefix='/')
+bot = bridge.Bot(intents=intents, command_prefix='!')
+
+
+class HelpView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(discord.ui.Button(label='Need help?', style=discord.ButtonStyle.gray,
+                                        url='https://github.com/genshin-discord/genshinbot/wiki/GenshinBot-registration-help'))
+
+
+async def help_embed(content):
+    embed = discord.Embed(
+        title="Registration error",
+        description=f"Some error occurred during registration process",
+        color=discord.Color.red())
+    embed.add_field(name=chr(173), value=content, inline=False)
+    embed.set_footer(text='Note: your cookie must have cookie_token')
+    return embed
 
 
 class RegModal(discord.ui.Modal):
@@ -49,18 +65,29 @@ class RegModal(discord.ui.Modal):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         cookie_str = self.children[0].value
         cookie_str = str(cookie_str).strip().strip('\'').strip('"')
         for _ in [';', 'ltoken', 'cookie_token']:
             if _ not in cookie_str:
                 log.warning(f'User {interaction.user.id} {interaction.user.name} sent {cookie_str}')
-                return await interaction.response.send_message(f'Wrong cookies string![{_} NOT Found]\n{COOKIE_HELP}')
+                return await interaction.followup.send(
+                    embed=await help_embed(f'Wrong cookies string![{_} NOT Found]'),
+                    view=HelpView(),
+                    ephemeral=True
+                )
         if 'ltuid' not in cookie_str and 'ltmid_v2' not in cookie_str:
-            return await interaction.response.send_message(
-                f'Wrong cookies string![ltuid/ltmid_v2 NOT Found]\n{COOKIE_HELP}')
+            return await interaction.followup.send(
+                embed=await help_embed('Wrong cookies string![ltuid/ltmid_v2 NOT Found]'),
+                view=HelpView(),
+                ephemeral=True
+            )
         if 'account_mid_v2' not in cookie_str and 'account_id' not in cookie_str:
-            return await interaction.response.send_message(
-                f'Wrong cookies string![account_id/account_mid_v2 NOT Found]\n{COOKIE_HELP}')
+            return await interaction.followup.send(
+                embed=await help_embed('Wrong cookies string![account_id/account_mid_v2 NOT Found]'),
+                view=HelpView(),
+                ephemeral=True
+            )
 
         cookie = SimpleCookie()
         cookie.load(cookie_str)
@@ -86,7 +113,12 @@ class RegModal(discord.ui.Modal):
                     client.hoyolab_id = hoyo.hoyolab_id
                 accounts = await client.get_game_accounts()
             except genshin.errors.InvalidCookies:
-                return await interaction.response.send_message(f'Wrong cookies![Login failure]{COOKIE_HELP}')
+                return await interaction.followup.send(
+                    embed=await help_embed('Wrong cookies![Login failure]'),
+                    view=HelpView(),
+                    ephemeral=True
+                )
+
         messages = ''
         sess = await create_session()
         for acc in accounts:
@@ -107,7 +139,7 @@ class RegModal(discord.ui.Modal):
         await close_session(sess)
         if not messages:
             messages = 'No genshin account detected.'
-        await interaction.response.send_message(messages)
+        await interaction.followup.send(messages)
 
 
 async def event_embed(guild_id=None):
@@ -183,7 +215,7 @@ async def global_abyss_embed(star_limit=999):
 async def fun_abyss_embed():
     embed = discord.Embed(
         title=f"Global abyss rank [Fun mode]",
-        description="Current Rules: Same gender teams only.",
+        description="Current Rules: New abyss, 12 battle counts only.",
         color=discord.Color.random())
     cur = 1
     sess = await create_session()
@@ -385,7 +417,7 @@ async def artifact_rank(ctx: discord.ApplicationContext):
     embed = discord.Embed(
         title="Artifact rank",
         description="Score = cr*2 + cd\nGoblet: HP%/ATK%/DEF% excluded.\nCirclet: Healing Bonus/HP%/ATK%/DEF% excluded."
-                    "\n\nTop 5 good artifact(score>30) owner",
+                    "\n\nTop 5 good artifact(score>40) owner",
         color=discord.Color.random())
     embed.set_footer(text="Only top 5 in this server are shown.")
     embeds.append(embed)
@@ -734,7 +766,7 @@ async def artifact_update_user(e: EnkaArtifact, uid, gid, sess):
     try:
         # sess = await create_session()
         async for artifact in e.fetch_artifact_user(uid):
-            if artifact.score > 30:
+            if artifact.score > 40:
                 await create_artifact(artifact, uid, gid, sess)
         # await close_session(sess)
     except enkapy.exception.UIDNotFounded:
@@ -743,7 +775,7 @@ async def artifact_update_user(e: EnkaArtifact, uid, gid, sess):
         print(e)
 
 
-@tasks.loop(hours=1)
+@tasks.loop(hours=2)
 async def work_thread():
     """Update abyss and check user note, do daily, artifact update"""
     e = await EnkaArtifact.create()
@@ -758,9 +790,16 @@ async def work_thread():
             client.region = genshin.utility.recognize_region(user.uid, genshin.Game.GENSHIN)
             client.lang = 'en-us'
             client.USER_AGENT = await random_ua()
-            if not client.hoyolab_id:
-                hoyo = await client.get_hoyolab_user()
-                client.hoyolab_id = hoyo.hoyolab_id
+            try:
+                if not client.hoyolab_id:
+                    hoyo = await client.get_hoyolab_user()
+                    client.hoyolab_id = hoyo.hoyolab_id
+            except genshin.errors.GenshinException as e:
+                await disable_user_cookies(cookie, sess)
+                discord_user = await bot.fetch_user(int(user.discord_id))
+                await discord_user.send(f'Account {user.nickname}[{user.uid}] session expired.')
+                log.warning(f'Error work thread in {user.uid}')
+                continue
             try:
                 await do_daily(bot, user, sess)
                 await abyss_update_user(client, user.uid, user.discord_guild, sess)
@@ -774,7 +813,9 @@ async def work_thread():
                     await disable_user_cookies(user.cookie, sess)
                     discord_user = await bot.fetch_user(int(user.discord_id))
                     await discord_user.send(
-                        f'Account {user.nickname}[{user.uid}] session expired.{COOKIE_HELP}')
+                        embed=await help_embed(f'Account {user.nickname}[{user.uid}] session expired'),
+                        view=HelpView()
+                    )
                 except discord.Forbidden:
                     break
             except genshin.errors.GenshinException:
