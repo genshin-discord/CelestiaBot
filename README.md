@@ -1,4 +1,4 @@
-# GenshinBot
+# Celestia Bot
 A simple yet powerful discord genshin bot
 
 ## Features
@@ -11,7 +11,7 @@ A simple yet powerful discord genshin bot
 
 ## How to add my account?
 
-See https://github.com/genshin-discord/genshinbot/wiki/GenshinBot-registration-help
+See https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-help
 
 ## BotLink
 
