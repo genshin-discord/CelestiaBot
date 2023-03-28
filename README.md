@@ -19,21 +19,17 @@ A simple yet powerful discord genshin bot
 | Command            | Description                              | Details |
 |--------------------|------------------------------------------|---------|
 | /reg               | Register your account                    | [check](https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-help)   |
-| /profile           | Show your current profile                |         |
-| /event_rank        | Show server event rank                   |         |
-| /abyss_rank        | Abyss rank in current server             |         |
-| /global_abyss_rank | Abyss rank in all servers                |         |
-| /artifact_rank     | Artifact ranks in your server            |         |
-| /abyss_hof         | Abyss hall of fame                       |         |
-| /codes             | Show all redeemable codes                |         |
+| /profile           | Show your current profile                | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#profile)        |
+| /event_rank        | Show server event rank                   | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#event_rank)        |
+| /abyss_rank        | Abyss rank in current server             | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#abyss_rank)        |
+| /global_abyss_rank | Abyss rank in all servers                | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#global_abyss_rank)        |
+| /artifact_rank     | Artifact ranks in your server            | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#artifact_rank)        |
+| /abyss_hof         | Abyss hall of fame                       | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#abyss_hof)        |
+| /codes             | Show all redeemable codes                | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#codes)        |
 | /redeem            | Redeem specific code                     |         |
 | /redeem_all        | Redeem all codes(Buggy)                  |         |
 | /refresh           | Refresh all your data(Once per 12 hours) |         |
 | /remove_me         | Remove all your data                     |         |
-
-## How to add my account?
-
-See https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-help
 
 ## BotLink
 
@@ -44,12 +40,4 @@ See https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-
 
 ## Feature preview
 
-### Server abyss rank
-![image](https://user-images.githubusercontent.com/109652760/179929807-ad46fa6b-8d9d-4d45-95f9-1e4f7f472ef9.png)
-
-### Server artifact rank
-![image](https://user-images.githubusercontent.com/109652760/179930084-7a0e4022-fb25-4bee-b2c2-71b9359d0707.png)
-
-### Global abyss rank
-![image](https://user-images.githubusercontent.com/109652760/179930381-d49081b5-7016-4046-b8e5-aa62e054b736.png)
-
+Check [wiki](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example)
