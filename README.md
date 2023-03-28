@@ -40,3 +40,7 @@ A simple yet powerful discord genshin bot
 ## Feature preview
 
 Check [wiki](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example)
+
+## Support server
+
+[![Discord Banner 1](https://discordapp.com/api/guilds/988699871676608522/widget.png?style=banner1)](https://discord.gg/JTP9QJHtm8)
