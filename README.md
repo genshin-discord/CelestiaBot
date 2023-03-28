@@ -16,14 +16,20 @@ A simple yet powerful discord genshin bot
 
 ## Commands
 
-| Command            | Description                   | Details |
-|--------------------|-------------------------------|---------|
-| /reg               | Register your account         | check   |
-| /profile           | Show your current profile     |         |
-| /abyss_rank        | Abyss rank in current server  |         |
-| /global_abyss_rank | Abyss rank in all servers     |         |
-| /artifact_rank     | Artifact ranks in your server |         |
-| /abyss_hof         | Abyss hall of fame            |         |
+| Command            | Description                              | Details |
+|--------------------|------------------------------------------|---------|
+| /reg               | Register your account                    | check   |
+| /profile           | Show your current profile                |         |
+| /event_rank        | Show server event rank                   |         |
+| /abyss_rank        | Abyss rank in current server             |         |
+| /global_abyss_rank | Abyss rank in all servers                |         |
+| /artifact_rank     | Artifact ranks in your server            |         |
+| /abyss_hof         | Abyss hall of fame                       |         |
+| /codes             | Show all redeemable codes                |         |
+| /redeem            | Redeem specific code                     |         |
+| /redeem_all        | Redeem all codes(Buggy)                  |         |
+| /refresh           | Refresh all your data(Once per 12 hours) |         |
+| /remove_me         | Remove all your data                     |         |
 
 ## How to add my account?
 
