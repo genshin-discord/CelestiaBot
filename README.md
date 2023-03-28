@@ -29,6 +29,7 @@ A simple yet powerful discord genshin bot
 | /artifact_rank     | Artifact ranks in your server            | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#artifact_rank)        |
 | /abyss_hof         | Abyss hall of fame                       | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#abyss_hof)        |
 | /codes             | Show all redeemable codes                | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#codes)        |
+| /notify            | Enable resin/transformer notification    |         |
 | /redeem            | Redeem specific code                     |         |
 | /redeem_all        | Redeem all codes(Buggy)                  |         |
 | /refresh           | Refresh all your data(Once per 12 hours) |         |
