@@ -14,6 +14,10 @@ A simple yet powerful discord genshin bot
 * Reminder for resin/transformer/teapot coins
 * More incoming...
 
+## Invite me!
+
+[Click me to add to your server](https://discord.com/api/oauth2/authorize?client_id=988697044988334100&permissions=414464722944&scope=bot%20applications.commands)
+
 ## Commands
 
 | Command            | Description                              | Details |
@@ -30,10 +34,6 @@ A simple yet powerful discord genshin bot
 | /redeem_all        | Redeem all codes(Buggy)                  |         |
 | /refresh           | Refresh all your data(Once per 12 hours) |         |
 | /remove_me         | Remove all your data                     |         |
-
-## BotLink
-
-[Click me to add to your server](https://discord.com/api/oauth2/authorize?client_id=988697044988334100&permissions=414464722944&scope=bot%20applications.commands)
 
 ## Note
 * Smart chat bot function is disabled deliberately for most discord server due to api limits 
