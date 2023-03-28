@@ -21,7 +21,7 @@ A simple yet powerful discord genshin bot
 
 | Command            | Description                              | Details |
 |--------------------|------------------------------------------|---------|
-| /reg               | Register your account                    | [check](https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-help)   |
+| /reg               | Register your account                    | [check](https://github.com/genshin-discord/CelestiaBot/wiki/CelestiaBot-registration-help)   |
 | /profile           | Show your current profile                | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#profile)        |
 | /event_rank        | Show server event rank                   | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#event_rank)        |
 | /abyss_rank        | Abyss rank in current server             | [check](https://github.com/genshin-discord/CelestiaBot/wiki/Command-example#abyss_rank)        |
