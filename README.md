@@ -14,6 +14,17 @@ A simple yet powerful discord genshin bot
 * Reminder for resin/transformer/teapot coins
 * More incoming...
 
+## Commands
+
+| Command            | Description                   | Details |
+|--------------------|-------------------------------|---------|
+| /reg               | Register your account         | check   |
+| /profile           | Show your current profile     |         |
+| /abyss_rank        | Abyss rank in current server  |         |
+| /global_abyss_rank | Abyss rank in all servers     |         |
+| /artifact_rank     | Artifact ranks in your server |         |
+| /abyss_hof         | Abyss hall of fame            |         |
+
 ## How to add my account?
 
 See https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-help
