@@ -15,8 +15,7 @@ A simple yet powerful discord genshin bot
 * More incoming...
 
 ## Invite me!
-
-[Click me to add to your server](https://discord.com/api/oauth2/authorize?client_id=988697044988334100&permissions=414464722944&scope=bot%20applications.commands)
+[![image](https://user-images.githubusercontent.com/109652760/228126364-0380c883-023a-445a-aad7-620a762e2270.png)](https://discord.com/api/oauth2/authorize?client_id=988697044988334100&permissions=414464722944&scope=bot%20applications.commands)
 
 ## Commands
 
