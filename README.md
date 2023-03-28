@@ -18,7 +18,7 @@ A simple yet powerful discord genshin bot
 
 | Command            | Description                              | Details |
 |--------------------|------------------------------------------|---------|
-| /reg               | Register your account                    | check   |
+| /reg               | Register your account                    | [check](https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-help)   |
 | /profile           | Show your current profile                |         |
 | /event_rank        | Show server event rank                   |         |
 | /abyss_rank        | Abyss rank in current server             |         |
