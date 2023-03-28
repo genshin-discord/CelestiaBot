@@ -1,4 +1,9 @@
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/109652760/228099008-d0303ceb-4795-4f60-b6b2-d6bd8c5a5f19.png" />
+</p>
+
 # Celestia Bot
+
 A simple yet powerful discord genshin bot
 
 ## Features
