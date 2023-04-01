@@ -3,7 +3,7 @@ Please login in https://bbs.mihoyo.com/ys/ or https://www.hoyolab.com/ and send 
 
 NOTE: Your cookies **MUST HAVE** "cookie_token" otherwise it cannot be used.
 Try use incognito mode/inprivate mode if your cookies doesn't have "cookie_token"
-Check https://github.com/genshin-discord/CelestiaBot/wiki/GenshinBot-registration-help for more detailed steps'''
+Check https://github.com/genshin-discord/CelestiaBot/wiki/CelestiaBot-registration-help for more detailed steps'''
 
 name_map = {'神里绫华': 'Kamisato Ayaka', '迪卢克': 'Diluc', '温迪': 'Venti', '可莉': 'Klee', '钟离': 'Zhongli', '达达利亚': 'Tartaglia',
             '七七': 'Qiqi', '甘雨': 'Ganyu', '莫娜': 'Mona', '胡桃': 'Hu Tao', '枫原万叶': 'Kaedehara Kazuha',

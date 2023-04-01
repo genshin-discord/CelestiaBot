@@ -401,9 +401,13 @@ async def get_abyss_rank(discord_guild, limit=5, star_limit=999, sess=db_sess):
     return data
 
 
-async def get_current_season_full_abyss(sess=db_sess):
+async def get_current_season_full_abyss(guild=None, sess=db_sess):
     current_season = await get_current_abyss_season(sess)
-    query = select(Abyss).where(and_(Abyss.season == current_season)).order_by(Abyss.time)
+    if guild:
+        query = select(Abyss).where(and_(Abyss.season == current_season, Abyss.discord_guild == guild)).order_by(
+            Abyss.time)
+    else:
+        query = select(Abyss).where(Abyss.season == current_season).order_by(Abyss.time)
     data = await sess.execute(query)
     return data
 

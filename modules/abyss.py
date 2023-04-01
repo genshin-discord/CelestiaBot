@@ -70,6 +70,18 @@ async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
 
 
 async def fun_abyss_check(abyss: Abyss) -> bool:
+    name_replace = re.compile(r'\(.+?\)')
+    for team in abyss.team.split('\n'):
+        for char in team.split('/'):
+            char = name_replace.sub('', char)
+            char_data = globals.global_genshin_data[char]
+            if char_data:
+                if char_data['nation'] != 'Sumeru':
+                    return False
+    return True
+
+
+async def fun_abyss_check_65(abyss: Abyss) -> bool:
     if abyss.battle_count != 12:
         return False
     return True
@@ -137,11 +149,11 @@ async def fun_abyss_check_60(abyss: Abyss) -> bool:
     return True
 
 
-async def fun_abyss_filter(limit=10, sess=None):
+async def fun_abyss_filter(guild=None, limit=10, sess=None):
     if not globals.global_genshin_data:
         globals.global_genshin_data = await GenshinData.create()
     result = {}
-    for abyss in await get_current_season_full_abyss(sess=sess):
+    for abyss in await get_current_season_full_abyss(guild=guild, sess=sess):
         abyss = abyss[0]
         if await fun_abyss_check(abyss):
             if abyss.uid in result:

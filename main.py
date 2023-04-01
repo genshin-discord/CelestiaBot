@@ -28,6 +28,7 @@ from modules.genshin_data import GenshinData
 
 intents = discord.Intents.default()
 intents.members = True
+intents.voice_states = True
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 # bot = bridge.Bot(intents=intents, command_prefix='/', debug_guilds=TEST_GUILDS)
@@ -39,7 +40,7 @@ class HelpView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.add_item(discord.ui.Button(label='Need help?', style=discord.ButtonStyle.gray,
-                                        url='https://github.com/genshin-discord/genshinbot/wiki/GenshinBot-registration-help'))
+                                        url='https://github.com/genshin-discord/CelestiaBot/wiki/CelestiaBot-registration-help'))
 
 
 async def help_embed(content):
@@ -212,16 +213,16 @@ async def global_abyss_embed(star_limit=999):
     return embed
 
 
-async def fun_abyss_embed():
+async def fun_abyss_embed(guild=None):
     embed = discord.Embed(
         title=f"Global abyss rank [Fun mode]",
-        description="Current Rules: New abyss, 12 battle counts only.",
+        description="Current Rules: Sumeru characters only.",
         color=discord.Color.random())
     cur = 1
     sess = await create_session()
     if not globals.global_genshin_data:
         globals.global_genshin_data = await GenshinData.create()
-    for abyss in await fun_abyss_filter(sess=sess):
+    for abyss in await fun_abyss_filter(guild, sess=sess):
         user = await fetch_user(abyss.uid, sess=sess)
         if user:
             uid = str(user.uid)
@@ -239,14 +240,19 @@ async def fun_abyss_embed():
     return embed
 
 
-async def abyss_embed(ctx, star_limit=999):
+async def abyss_embed(guild_id, star_limit=999):
+    if star_limit == 999:
+        str_limit = 'Unlimited*'
+    else:
+        str_limit = f'Limited-{star_limit}*'
+
     embed = discord.Embed(
-        title="Abyss rank",
+        title=f"Abyss rank [{str_limit}]",
         description="Only counts seconds between 12-3-2 and 12-1-1",
         color=discord.Color.random())
     cur = 1
     sess = await create_session()
-    for abyss in await get_abyss_rank(ctx.guild_id, star_limit=star_limit, sess=sess):
+    for abyss in await get_abyss_rank(guild_id, star_limit=star_limit, sess=sess):
         abyss = abyss[0]
         user = await fetch_user(abyss.uid, sess=sess)
         if user:
@@ -296,7 +302,8 @@ async def abyss_hof_embed():
 
 
 class AbyssButton(discord.ui.View):
-    def __init__(self):
+    def __init__(self, guild=None):
+        self.guild = guild
         super().__init__(timeout=None)  # timeout of the view must be set to None
 
     @discord.ui.button(label="Unlimited", custom_id='unlimited_button', style=discord.ButtonStyle.primary,
@@ -305,7 +312,10 @@ class AbyssButton(discord.ui.View):
         for child in self.children:
             child.disabled = False
         button.disabled = True
-        embed = await global_abyss_embed()
+        if self.guild:
+            embed = await abyss_embed(self.guild)
+        else:
+            embed = await global_abyss_embed()
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="Limited-8", custom_id='limited_button8', style=discord.ButtonStyle.success, emoji='😎')
@@ -313,7 +323,10 @@ class AbyssButton(discord.ui.View):
         for child in self.children:
             child.disabled = False
         button.disabled = True
-        embed = await global_abyss_embed(8)
+        if self.guild:
+            embed = await abyss_embed(self.guild, 8)
+        else:
+            embed = await global_abyss_embed(8)
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="Limited-16", custom_id='limited_button16', style=discord.ButtonStyle.success, emoji='😎')
@@ -321,7 +334,10 @@ class AbyssButton(discord.ui.View):
         for child in self.children:
             child.disabled = False
         button.disabled = True
-        embed = await global_abyss_embed(16)
+        if self.guild:
+            embed = await abyss_embed(self.guild, 16)
+        else:
+            embed = await global_abyss_embed(16)
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="Fun", custom_id='fun_button', style=discord.ButtonStyle.secondary, emoji='🤣')
@@ -329,7 +345,10 @@ class AbyssButton(discord.ui.View):
         for child in self.children:
             child.disabled = False
         button.disabled = True
-        embed = await fun_abyss_embed()
+        if self.guild:
+            embed = await fun_abyss_embed(self.guild)
+        else:
+            embed = await fun_abyss_embed()
         await interaction.response.edit_message(embed=embed, view=self)
 
 
@@ -372,7 +391,7 @@ async def global_abyss_rank(ctx: discord.ApplicationContext):
 
 @bot.bridge_command(name="abyss_rank", description="Show top 5 abyss record in current server")
 async def abyss_rank(ctx: discord.ApplicationContext):
-    await ctx.respond(embed=await abyss_embed(ctx))
+    await ctx.respond(embed=await abyss_embed(ctx.guild_id), view=AbyssButton(ctx.guild_id))
 
 
 async def plot_artifact_rank(gid, sess):
@@ -604,7 +623,7 @@ async def redeem_all(ctx: discord.ApplicationContext):
                         except genshin.errors.RedemptionClaimed:
                             resp += f'{code} redeem already claimed {escape_markdown(user.nickname)}[{user.uid}]\n'
                         except genshin.errors.RedemptionInvalid:
-                            resp += f'{code} code invalid'
+                            resp += f'{code} code invalid\n'
                             break
                         except genshin.errors.RedemptionCooldown:
                             await asyncio.sleep(3)

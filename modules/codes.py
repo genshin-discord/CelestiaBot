@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import re
 
 code_regex = re.compile(r'^\w{6,16}$')
+bad_codes = ['Giveaways']
 
 
 class Codes:
@@ -23,7 +24,7 @@ class Codes:
             for l in content.find_all('ul'):
                 for code in l.find_all_next('strong'):
                     code = code.text.strip()
-                    if code_regex.match(code):
+                    if code_regex.match(code) and code not in bad_codes:
                         codes.append(code)
             return list(set(codes))
         except Exception as e:

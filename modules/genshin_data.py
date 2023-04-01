@@ -32,7 +32,7 @@ class GenshinDataBackend:
         json_data = os.path.join(full_path, 'en.json')
         if os.path.exists(json_data):
             try:
-                with open(json_data, 'rb') as f:
+                with open(json_data, 'r', encoding='utf-8', errors='ignore') as f:
                     return json.load(f)
             except UnicodeError as e:
                 print(f'Error in loading {json_data}')
