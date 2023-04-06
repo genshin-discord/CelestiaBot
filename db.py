@@ -111,21 +111,12 @@ engine = create_async_engine(URL.create('mysql+asyncmy', MYSQL_USER, MYSQL_PASS,
 async def create_session():
     global engine
     async_sess = sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
-    sess = async_sess()
-    set_mode = text('''SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));''')
-    await sess.execute(set_mode)
-    return sess
+    async with async_sess.begin() as session:
+        set_mode = text('''SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));''')
+        await session.execute(set_mode)
+    return async_sess
 
-
-async def close_session(sess):
-    global engine
-    await sess.close()
-
-
-#    await engine.dispose()
-
-
-db_sess = None  # asyncio.run(create_session())
+db_sess = None
 
 
 async def create_artifact(artifact: ArtifactData, uid, gid, sess):
@@ -236,33 +227,8 @@ async def create_update_abyss(uid, season, time_used, team, star, battle_count, 
         info=insert_stmt.inserted.info,
         battle_count=insert_stmt.inserted.battle_count,
         discord_guild=insert_stmt.inserted.discord_guild,
-        # uid=insert_stmt.inserted.uid,
-        # time=insert_stmt.inserted.time,
-        # star=insert_stmt.inserted.star
     )
     await sess.execute(final_stmt)
-
-    # if not abyss:
-    #     abyss = Abyss()
-    #     abyss.uid = uid
-    # else:
-    #     if time_used >= abyss.time and season == abyss.season:
-    #         if discord_guild == abyss.discord_guild:
-    #             if star >= abyss.star or time_used > abyss.time:
-    #                 return
-    #         else:
-    #             time_used = abyss.time
-    #             team = abyss.team
-    #             star = abyss.star
-    #     # if discord_guild != abyss.discord_guild and time_used >= abyss.time and season == abyss.season:
-    #     #     time_used = abyss.time
-    # abyss.season = season
-    # abyss.star = star
-    # abyss.battle_count = battle_count
-    # abyss.time = time_used
-    # abyss.team = team
-    # abyss.discord_guild = discord_guild
-    # sess.add(abyss)
     return await sess.commit()
 
 
@@ -507,9 +473,9 @@ async def season_update(season, limited=[8, 16], fun=True, sess=db_sess):
 
 @cached(ttl=600)
 async def get_admin(discord_id) -> Admin:
-    sess = await create_session()
-    query = select(Admin).where(Admin.discord_id == discord_id)
-    data = await sess.execute(query)
-    data = data.scalars().first()
-    await close_session(sess)
+    _ = await create_session()
+    async with _() as sess:
+        query = select(Admin).where(Admin.discord_id == discord_id)
+        data = await sess.execute(query)
+        data = data.scalars().first()
     return data

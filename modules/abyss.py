@@ -74,6 +74,8 @@ async def fun_abyss_check(abyss: Abyss) -> bool:
     for team in abyss.team.split('\n'):
         for char in team.split('/'):
             char = name_replace.sub('', char)
+            if char.lower() == 'wanderer':
+                continue
             char_data = globals.global_genshin_data[char]
             if char_data:
                 if char_data['nation'] != 'Sumeru':

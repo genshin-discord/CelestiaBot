@@ -6,18 +6,12 @@ code_regex = re.compile(r'^\w{6,16}$')
 bad_codes = ['Giveaways']
 
 
-class Codes:
-    def __init__(self, s):
-        self.s: APIBase = s
+class Codes(APIBase):
+    base_url = 'https://www.pockettactics.com'
 
-    @classmethod
-    async def create(cls):
-        s = await APIBase.create('https://www.pockettactics.com')
-        return cls(s)
-
-    async def get(self):
+    async def list(self):
         try:
-            data = await self.s.get('/genshin-impact/codes')
+            data = await self.get('/genshin-impact/codes')
             b = BeautifulSoup(await data.text(), 'lxml')
             content = b.find('div', {'id': 'site_wrap'})
             codes = []
@@ -31,14 +25,11 @@ class Codes:
             print(f'Codes exception {e}')
             return []
 
-    async def close(self):
-        await self.s.close()
 
-
-async def test():
-    c = await Codes.create()
-    print(await c.get())
-    await c.close()
+# async def test():
+#     c = await Codes.create()
+#     print(await c.get())
+#     await c.close()
 
 # import asyncio
 # asyncio.run(test())
