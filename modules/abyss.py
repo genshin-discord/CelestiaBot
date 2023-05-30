@@ -72,6 +72,35 @@ async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
 async def fun_abyss_check(abyss: Abyss) -> bool:
     name_replace = re.compile(r'\(.+?\)')
     for team in abyss.team.split('\n'):
+        team_vision = set()
+        team_count = 0
+        for char in team.split('/'):
+            char = name_replace.sub('', char)
+            if char.lower() == 'traveler':
+                return False
+            char_data = globals.global_genshin_data[char]
+            if char_data and 'vision' in char_data :
+                team_vision.add(char_data['vision'])
+                team_count += 1
+        if len(team_vision) != team_count:
+            return False
+    return True
+
+
+async def fun_abyss_check_67(abyss: Abyss) -> bool:
+    if not abyss.info:
+        return False
+    for team in abyss.info:
+        for char in team:
+            artifact = char[6]
+            if len(artifact) > 4:
+                return False
+    return True
+
+
+async def fun_abyss_check_66(abyss: Abyss) -> bool:
+    name_replace = re.compile(r'\(.+?\)')
+    for team in abyss.team.split('\n'):
         for char in team.split('/'):
             char = name_replace.sub('', char)
             if char.lower() == 'wanderer':
@@ -83,7 +112,7 @@ async def fun_abyss_check(abyss: Abyss) -> bool:
     return True
 
 
-async def fun_abyss_check_65(abyss: Abyss) -> bool:
+async def fun_abyss_check_67(abyss: Abyss) -> bool:
     if abyss.battle_count != 12:
         return False
     return True

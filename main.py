@@ -16,6 +16,7 @@ import numpy as np
 from constant import *
 import globals
 from db import *
+from typing import Dict
 from modules.artifact import EnkaArtifact
 from modules.codes import Codes
 from modules.log import log
@@ -24,6 +25,7 @@ from modules.note import note_check_user
 from modules.abyss import abyss_update_user, fun_abyss_filter
 from modules.useragent import random_ua
 from modules.event import event_update
+from modules.simsimi import AIChat
 from modules.genshin_data import GenshinData
 
 intents = discord.Intents.default()
@@ -33,7 +35,8 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 # bot = bridge.Bot(intents=intents, command_prefix='/', debug_guilds=TEST_GUILDS)
 
-bot = bridge.Bot(intents=intents, command_prefix='!')
+bot = bridge.Bot(intents=intents, command_prefix='!', help_command=None)
+bot_cmd_list: Dict[str, discord.ext.bridge.BridgeSlashCommand] = {}
 
 
 class HelpView(discord.ui.View):
@@ -216,7 +219,7 @@ async def global_abyss_embed(star_limit=999):
 async def fun_abyss_embed(guild=None):
     embed = discord.Embed(
         title=f"Global abyss rank [Fun mode]",
-        description="Current Rules: Sumeru characters only.",
+        description=f"Current Rules: See {bot_cmd_list['fun_abyss_rules'].mention}.",
         color=discord.Color.random())
     cur = 1
     _ = await create_session()
@@ -384,6 +387,20 @@ async def abyss_hall_of_fame(ctx: discord.ApplicationContext):
     await ctx.respond(embed=await abyss_hof_embed())
 
 
+@bot.bridge_command(name="fun_abyss_rules", description="Show abyss fun mode rules.")
+async def abyss_fun_rules(ctx: discord.ApplicationContext):
+    embed = discord.Embed(
+        title="Abyss fun mode rules",
+        color=discord.Color.random())
+    embed.add_field(name=chr(173),
+                    value=f"**1.Each team members must have different vision(Protective Canopy Resonance)**\n",
+                    inline=False)
+    embed.add_field(name='',
+                    value=f"**2.Traveler excluded**\n",
+                    inline=False)
+    await ctx.respond(embed=embed)
+
+
 @bot.bridge_command(name="global_abyss_rank", description="Show top 10 abyss record in all servers")
 async def global_abyss_rank(ctx: discord.ApplicationContext):
     await ctx.respond(embed=await global_abyss_embed(), view=AbyssButton())
@@ -520,7 +537,7 @@ async def notify_change(ctx: discord.ApplicationContext,
 @bot.bridge_command(name='codes', description="Retrieve all current available redeem codes")
 async def codes(ctx: discord.ApplicationContext):
     await ctx.defer()
-    c:Codes = await Codes()
+    c: Codes = await Codes()
     redeem_codes = await c.list()
     if redeem_codes:
 
@@ -591,7 +608,7 @@ async def redeem_all(ctx: discord.ApplicationContext):
     await ctx.defer()
     _ = await create_session()
     async with _() as sess:
-        c:Codes = await Codes()
+        c: Codes = await Codes()
         redeem_codes = await c.list()
         if not redeem_codes:
             return await ctx.followup.send('No redeemable codes for now.')
@@ -625,7 +642,6 @@ async def redeem_all(ctx: discord.ApplicationContext):
                                 resp += f'{code} redeem already claimed {escape_markdown(user.nickname)}[{user.uid}]\n'
                             except genshin.errors.RedemptionInvalid:
                                 resp += f'{code} code invalid\n'
-                                break
                             except genshin.errors.RedemptionCooldown:
                                 await asyncio.sleep(3)
                                 continue
@@ -733,54 +749,6 @@ async def refresh(ctx: discord.ApplicationContext):
     return await ctx.followup.send(resp)
 
 
-class SupremeHelpCommand(commands.HelpCommand):
-    def get_command_signature(self, command):
-        return '%s%s %s' % (self.context.clean_prefix, command.qualified_name, command.signature)
-
-    async def send_bot_help(self, mapping):
-        embed = discord.Embed(title="Help", color=discord.Color.blurple())
-        for cog, commands in mapping.items():
-            filtered = await self.filter_commands(commands, sort=True)
-            if command_signatures := [
-                self.get_command_signature(c) for c in filtered
-            ]:
-                cog_name = getattr(cog, "qualified_name", "No Category")
-                embed.add_field(name=cog_name, value="\n".join(command_signatures), inline=False)
-
-        channel = self.get_destination()
-        await channel.send(embed=embed)
-
-    async def send_command_help(self, command):
-        embed = discord.Embed(title=self.get_command_signature(command), color=discord.Color.blurple())
-        if command.help:
-            embed.description = command.help
-        if alias := command.aliases:
-            embed.add_field(name="Aliases", value=", ".join(alias), inline=False)
-
-        channel = self.get_destination()
-        await channel.send(embed=embed)
-
-    async def send_help_embed(self, title, description, commands):  # a helper function to add commands to an embed
-        embed = discord.Embed(title=title, description=description or "No help found...")
-
-        if filtered_commands := await self.filter_commands(commands):
-            for command in filtered_commands:
-                embed.add_field(name=self.get_command_signature(command), value=command.help or "No help found...")
-
-        await self.get_destination().send(embed=embed)
-
-    async def send_group_help(self, group):
-        title = self.get_command_signature(group)
-        await self.send_help_embed(title, group.help, group.commands)
-
-    async def send_cog_help(self, cog):
-        title = cog.qualified_name or "No"
-        await self.send_help_embed(f'{title} Category', cog.description, cog.get_commands())
-
-
-bot.help_command = SupremeHelpCommand()
-
-
 async def artifact_update_user(e: EnkaArtifact, uid, gid, sess):
     try:
         # sess = await create_session()
@@ -792,6 +760,15 @@ async def artifact_update_user(e: EnkaArtifact, uid, gid, sess):
         return
     except Exception as e:
         print(e)
+
+
+@bot.bridge_command(name='help', description="Celestia help menu")
+async def Celestia_help(ctx: discord.ApplicationContext):
+    embed = discord.Embed(colour=discord.Color.blue(),
+                          title='Celestia Bot Help')
+    for name, command in bot_cmd_list.items():
+        embed.add_field(name=command.mention, value=command.description, inline=False)
+    await ctx.respond(embed=embed, view=HelpView())
 
 
 @tasks.loop(hours=2)
@@ -844,6 +821,11 @@ async def work_thread():
 
 @bot.event
 async def on_ready():
+    global bot_cmd_list
+    for cmd in await bot.get_desynced_commands():
+        command: discord.ext.bridge.BridgeSlashCommand = cmd["command"]
+        bot_cmd_list[command.name] = command
+
     bot.add_view(AbyssButton())
     bot.add_view(EventButton())
     await bot.change_presence(
