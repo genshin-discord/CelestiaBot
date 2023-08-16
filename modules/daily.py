@@ -42,21 +42,22 @@ async def do_daily_user(user: User):
         if not client.hoyolab_id:
             hoyo = await client.get_hoyolab_user()
             client.hoyolab_id = hoyo.hoyolab_id
+        await client.claim_daily_reward(reward=False, game=genshin.Game.GENSHIN)
         fail = 0
-        while fail < 5:
-            resp = await client.request_daily_reward("sign", method="POST", game=genshin.Game.GENSHIN)
-            break
-            # if isinstance(resp, dict) and 'gt' in resp and 'challenge' in resp:
-            #     fail += 1
-            #     g = await Geetest.create()
-            #     r = await g.crack(resp['gt'], resp['challenge'])
-            #     if r['data']['result'] != 'click':
-            #         break
-            #     print(r)
-            #     await g.close()
-            #     await asyncio.sleep(random.randint(1, 5))
-            # else:
-            #     break
+        # while fail < 5:
+        #     resp = await client.request_daily_reward("sign", method="POST", game=genshin.Game.GENSHIN)
+        #     break
+        # if isinstance(resp, dict) and 'gt' in resp and 'challenge' in resp:
+        #     fail += 1
+        #     g = await Geetest.create()
+        #     r = await g.crack(resp['gt'], resp['challenge'])
+        #     if r['data']['result'] != 'click':
+        #         break
+        #     print(r)
+        #     await g.close()
+        #     await asyncio.sleep(random.randint(1, 5))
+        # else:
+        #     break
 
 
 async def do_daily(bot: discord.Bot, user: User, sess):

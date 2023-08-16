@@ -41,9 +41,9 @@ async def event_update(client: genshin.Client, uid, gid, sess=db_sess):
         score_key = event_info.score_key
     else:
         list_key, score_key = find_event_key(event_data)
-        await add_event(event_id, list_key, score_key, sess)
-        await disable_all_event(sess)
         if list_key and score_key:
+            await add_event(event_id, list_key, score_key, sess)
+            await disable_all_event(sess)
             await enable_event(event_id, sess)
 
     if not list_key:

@@ -291,7 +291,7 @@ async def add_event(event_id, list_key, score_key, sess=db_sess):
     e.score_key = score_key
     e.record_list_key = list_key
     e.enabled = False
-    sess.add(e)
+    sess.merge(e)
     return await sess.commit()
 
 

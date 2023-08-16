@@ -6,6 +6,8 @@ import genshin
 import genshin.errors
 import asyncio
 import datetime
+
+import pydantic
 from discord.ext import bridge, tasks, commands
 from discord.commands import Option
 from discord.utils import escape_markdown
@@ -25,7 +27,6 @@ from modules.note import note_check_user
 from modules.abyss import abyss_update_user, fun_abyss_filter
 from modules.useragent import random_ua
 from modules.event import event_update
-from modules.simsimi import AIChat
 from modules.genshin_data import GenshinData
 
 intents = discord.Intents.default()
@@ -108,13 +109,13 @@ class RegModal(discord.ui.Modal):
 
         try:
             client.region = genshin.Region.OVERSEAS
+            if not client.hoyolab_id:
+                hoyo = await client.get_hoyolab_user()
+                client.hoyolab_id = hoyo.hoyolab_id
             accounts = await client.get_game_accounts()
         except Exception as e:
             try:
                 client.region = genshin.Region.CHINESE
-                if not client.hoyolab_id:
-                    hoyo = await client.get_hoyolab_user()
-                    client.hoyolab_id = hoyo.hoyolab_id
                 accounts = await client.get_game_accounts()
             except genshin.errors.InvalidCookies:
                 return await interaction.followup.send(
@@ -392,12 +393,20 @@ async def abyss_fun_rules(ctx: discord.ApplicationContext):
     embed = discord.Embed(
         title="Abyss fun mode rules",
         color=discord.Color.random())
+    # embed.add_field(name=chr(173),
+    #                 value=f"**New abyss, 12 battle counts only**\n",
+    #                 inline=False)
     embed.add_field(name=chr(173),
-                    value=f"**1.Each team members must have different vision(Protective Canopy Resonance)**\n",
+                    value=f"**Standard banner 5* only(4* unrestricted)**\n",
                     inline=False)
-    embed.add_field(name='',
-                    value=f"**2.Traveler excluded**\n",
-                    inline=False)
+
+    for unit in ['Qiqi', 'Diluc', 'Mona', 'Keqing', 'Jean', 'Tighnari', 'Dehya']:
+        embed.add_field(name=chr(173),
+                        value=f"{unit}\n",
+                        inline=False)
+    # embed.add_field(name='',
+    #                 value=f"**2.Traveler excluded**\n",
+    #                 inline=False)
     await ctx.respond(embed=embed)
 
 
@@ -596,7 +605,7 @@ async def redeem(ctx: discord.ApplicationContext, code: str):
                         await asyncio.sleep(3)
                         continue
                     except genshin.errors.GenshinException as e:
-                        resp += f'Redeem failed {escape_markdown(user.nickname)}[{user.uid}], cookies or code invalid\n'
+                        resp += f'Redeem failed {escape_markdown(user.nickname)}[{user.uid}], {e}\n'
                         print(e)
             if not resp:
                 resp = 'Your accounts are disabled.'
@@ -816,7 +825,10 @@ async def work_thread():
                     except discord.Forbidden:
                         break
                 except genshin.errors.GenshinException:
-                    log.warning(f'Error work thread in {user.uid}')
+                    log.warning(f'genshin error work thread in {user.uid}')
+                except pydantic.error_wrappers.ValidationError:
+                    log.warning(f'pydantic error work thread in {user.uid}')
+                    continue
 
 
 @bot.event

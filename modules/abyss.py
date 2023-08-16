@@ -70,6 +70,61 @@ async def abyss_update_user(client: genshin.Client, uid, gid, sess=db_sess):
 
 
 async def fun_abyss_check(abyss: Abyss) -> bool:
+    standard = ['Qiqi', 'Diluc', 'Mona', 'Keqing', 'Jean', 'Tighnari', 'Dehya']
+    for team in abyss.info:
+        for char in team:
+            if char[1] == 5 and char[0] not in standard:
+                return False
+    return True
+
+
+async def fun_abyss_check_71(abyss: Abyss) -> bool:
+    shield = ['nahida', 'venti', 'zhongli', 'raiden']
+    for top_unit in shield:
+        if top_unit in abyss.team.lower():
+            return False
+    return True
+
+
+async def fun_abyss_check_70(abyss: Abyss) -> bool:
+    shield = ['Baizhu', 'Jean', 'Kokomi', 'Qiqi', 'Barbara', 'Bennett', 'Diona', 'Dori', 'Mika', 'Noelle', 'Sayu',
+              'Shinobu', 'Yaoyao']
+    for heal_unit in shield:
+        if heal_unit.lower() in abyss.team.lower():
+            return False
+    if 'gorou' in abyss.team.lower():
+        for team in abyss.info:
+            for char in team:
+                if char[0].lower() == 'gorou' and char[2] > 3:
+                    return False
+    if 'zhongli' in abyss.team.lower():
+        for team in abyss.info:
+            for char in team:
+                if char[0].lower() == 'zhongli' and char[2] > 5:
+                    return False
+    return True
+
+
+async def fun_abyss_check_69(abyss: Abyss) -> bool:
+    shield = ['kirara', 'zhongli', 'diona', 'noelle', 'beidou', 'xinyan', 'layla', 'baizhu']
+    for shield_unit in shield:
+        if shield_unit in abyss.team.lower():
+            return False
+    if 'yanfei' in abyss.team.lower():
+        for team in abyss.info:
+            for char in team:
+                if char[0].lower() == 'yanfei' and char[2] > 3:
+                    return False
+    return True
+
+
+# async def fun_abyss_check(abyss: Abyss) -> bool:
+#     if abyss.battle_count != 12:
+#         return False
+#     return True
+
+
+async def fun_abyss_check_68(abyss: Abyss) -> bool:
     name_replace = re.compile(r'\(.+?\)')
     for team in abyss.team.split('\n'):
         team_vision = set()
@@ -79,7 +134,7 @@ async def fun_abyss_check(abyss: Abyss) -> bool:
             if char.lower() == 'traveler':
                 return False
             char_data = globals.global_genshin_data[char]
-            if char_data and 'vision' in char_data :
+            if char_data and 'vision' in char_data:
                 team_vision.add(char_data['vision'])
                 team_count += 1
         if len(team_vision) != team_count:
@@ -112,7 +167,7 @@ async def fun_abyss_check_66(abyss: Abyss) -> bool:
     return True
 
 
-async def fun_abyss_check_67(abyss: Abyss) -> bool:
+async def fun_abyss_check_65(abyss: Abyss) -> bool:
     if abyss.battle_count != 12:
         return False
     return True
