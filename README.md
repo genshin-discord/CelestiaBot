@@ -7,7 +7,7 @@
 A simple yet powerful discord genshin bot
 
 ## Features
-* Server/Global abyss rank, unlimited or limited(8 or 16 5*)
+* Server/Global abyss rank, unlimited or limited(8 or 16 5*) check https://abyssrank.com/
 * Server artifact rank
 * Abyss hall of fame
 * Auto collect daily reward in hoyolab
