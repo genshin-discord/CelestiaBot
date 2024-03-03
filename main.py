@@ -6,7 +6,7 @@ import genshin
 import genshin.errors
 import asyncio
 import datetime
-
+from table2ascii import table2ascii as t2a, PresetStyle
 import pydantic
 from discord.ext import bridge, tasks, commands
 from discord.commands import Option
@@ -21,12 +21,14 @@ from db import *
 from typing import Dict
 from modules.artifact import EnkaArtifact
 from modules.codes import Codes
+from modules.admin import control_center
 from modules.log import log
 from modules.daily import do_daily
 from modules.note import note_check_user
-from modules.abyss import abyss_update_user, fun_abyss_filter
+from modules.abyss import abyss_update_user, fun_abyss_filter, abyss_fun_module
 from modules.useragent import random_ua
 from modules.event import event_update
+from modules.simsimi import AIChat
 from modules.genshin_data import GenshinData
 
 intents = discord.Intents.default()
@@ -93,10 +95,15 @@ class RegModal(discord.ui.Modal):
                 view=HelpView(),
                 ephemeral=True
             )
+        cookies = {}
+        for c in cookie_str.split(';'):
+            k, v = c.split('=', 1)
+            cookies[k.strip()] = v.strip()
 
         cookie = SimpleCookie()
         cookie.load(cookie_str)
-        cookies = {k: v.value for k, v in cookie.items()}
+        for k, v in cookie.items():
+            cookies[k] = v.value
 
         # for _ in ['ltuid', 'ltoken', 'cookie_token', 'account_id']:
         #     if _ not in cookies:
@@ -114,6 +121,7 @@ class RegModal(discord.ui.Modal):
                 client.hoyolab_id = hoyo.hoyolab_id
             accounts = await client.get_game_accounts()
         except Exception as e:
+            log.warning(f'Oversea cookie failure, {e}')
             try:
                 client.region = genshin.Region.CHINESE
                 accounts = await client.get_game_accounts()
@@ -145,6 +153,29 @@ class RegModal(discord.ui.Modal):
         if not messages:
             messages = 'No genshin account detected.'
         await interaction.followup.send(messages)
+
+
+@bot.event
+async def on_message(message: discord.Message):
+    mentioned = False
+    dm = False
+    if message.mentions:
+        for user in message.mentions:
+            if user.id == BOT_ID:
+                mentioned = True
+                break
+    if isinstance(message.channel, discord.DMChannel) and message.author.id != BOT_ID:
+        dm = True
+    if mentioned or dm:
+        if not dm and message.guild and message.guild.id not in TEST_GUILDS:
+            # await message.channel.trigger_typing()
+            return  # await message.reply('Due to api limit, your server cannot use chatbot for now.')
+        content = message.content.replace(f'<@{BOT_ID}>', '').strip()
+        if dm:
+            await message.channel.trigger_typing()
+            return await control_center(bot, message)
+        if not message.author.bot:
+            await AIChat(message, content)
 
 
 async def event_embed(guild_id=None):
@@ -195,7 +226,8 @@ async def global_abyss_embed(star_limit=999):
     embed = discord.Embed(
         title=f"Global abyss rank [{str_limit}]",
         description="Only counts seconds between 12-3-2 and 12-1-1",
-        color=discord.Color.random())
+        color=discord.Color.random(),
+        url='https://abyssrank.com')
     cur = 1
     _ = await create_session()
     async with _() as sess:
@@ -213,7 +245,7 @@ async def global_abyss_embed(star_limit=999):
                                       f"{abyss.team}", inline=False)
                 cur += 1
 
-        embed.set_footer(text="Only top 10 are shown.")
+        embed.set_footer(text="check https://abyssrank.com for more!")
     return embed
 
 
@@ -221,7 +253,8 @@ async def fun_abyss_embed(guild=None):
     embed = discord.Embed(
         title=f"Global abyss rank [Fun mode]",
         description=f"Current Rules: See {bot_cmd_list['fun_abyss_rules'].mention}.",
-        color=discord.Color.random())
+        color=discord.Color.random(),
+        url='https://abyssrank.com')
     cur = 1
     _ = await create_session()
     async with _() as sess:
@@ -240,7 +273,7 @@ async def fun_abyss_embed(guild=None):
                                       f"{abyss.team}", inline=False)
                 cur += 1
 
-        embed.set_footer(text="Only top 10 are shown.")
+        embed.set_footer(text="check https://abyssrank.com for more!")
     return embed
 
 
@@ -392,32 +425,31 @@ async def abyss_hall_of_fame(ctx: discord.ApplicationContext):
 async def abyss_fun_rules(ctx: discord.ApplicationContext):
     embed = discord.Embed(
         title="Abyss fun mode rules",
-        color=discord.Color.random())
-    # embed.add_field(name=chr(173),
-    #                 value=f"**New abyss, 12 battle counts only**\n",
-    #                 inline=False)
-    embed.add_field(name=chr(173),
-                    value=f"**Standard banner 5* only(4* unrestricted)**\n",
-                    inline=False)
-
-    for unit in ['Qiqi', 'Diluc', 'Mona', 'Keqing', 'Jean', 'Tighnari', 'Dehya']:
+        description='Rules will be randomized for every abyss season',
+        color=discord.Color.random(),
+    )
+    _ = await create_session()
+    async with _() as sess:
+        season = await get_current_abyss_season(sess)
+        module = await abyss_fun_module(season, sess)
         embed.add_field(name=chr(173),
-                        value=f"{unit}\n",
+                        value=f"**{module.description}**\n",
                         inline=False)
-    # embed.add_field(name='',
-    #                 value=f"**2.Traveler excluded**\n",
-    #                 inline=False)
     await ctx.respond(embed=embed)
 
 
 @bot.bridge_command(name="global_abyss_rank", description="Show top 10 abyss record in all servers")
 async def global_abyss_rank(ctx: discord.ApplicationContext):
-    await ctx.respond(embed=await global_abyss_embed(), view=AbyssButton())
+    view = AbyssButton()
+    view.add_item(discord.ui.Button(label='View more', style=discord.ButtonStyle.gray, url='https://abyssrank.com'))
+    await ctx.respond(embed=await global_abyss_embed(), view=view)
 
 
 @bot.bridge_command(name="abyss_rank", description="Show top 5 abyss record in current server")
 async def abyss_rank(ctx: discord.ApplicationContext):
-    await ctx.respond(embed=await abyss_embed(ctx.guild_id), view=AbyssButton(ctx.guild_id))
+    view = AbyssButton(ctx.guild_id)
+    view.add_item(discord.ui.Button(label='View more', style=discord.ButtonStyle.gray, url='https://abyssrank.com'))
+    await ctx.respond(embed=await abyss_embed(ctx.guild_id), view=view)
 
 
 async def plot_artifact_rank(gid, sess):
@@ -549,25 +581,19 @@ async def codes(ctx: discord.ApplicationContext):
     c: Codes = await Codes()
     redeem_codes = await c.list()
     if redeem_codes:
-
-        embed = discord.Embed(
-            title=f'Total codes: {len(redeem_codes)}',
-            description=f"Current redeemable codes",
-            color=discord.Color.random()
+        output = t2a(
+            header=['Code', 'Reward'],
+            body=redeem_codes,
+            style=PresetStyle.thin_rounded
         )
-        #        embed.add_field(name=chr(173), value=chr(173))
-        for cur, code in enumerate(redeem_codes):
-            #            embed.add_field(name=chr(173), value=chr(173))
-            embed.add_field(name=chr(173), value=f"**{cur + 1}.{code}**", inline=False)
-            cur += 1
+        return await ctx.followup.send(f'```\n{output}\nAll codes are updated in realtime```')
     else:
         embed = discord.Embed(
             title=f'No redeemable codes now',
             description=f"GG",
             color=discord.Color.random()
         )
-    embed.set_footer(text="All codes are updated in real time.")
-    return await ctx.followup.send(embed=embed)
+        return await ctx.followup.send(embed=embed)
 
 
 @bot.bridge_command(name='redeem', description="Redeem code for your accounts")
@@ -633,7 +659,8 @@ async def redeem_all(ctx: discord.ApplicationContext):
                         user.last_redeem = time.time()
                         sess.add(user)
                         await sess.commit()
-                        for code in redeem_codes:
+                        for code_info in redeem_codes:
+                            code, reward = code_info
                             cookie = json.loads(user.cookie)
                             log.info(f'Trying to redeem code {code} for {user.uid}')
                             client = genshin.Client()
@@ -747,7 +774,7 @@ async def refresh(ctx: discord.ApplicationContext):
                         await abyss_update_user(client, user.uid, user.discord_guild, sess=sess)
                         await artifact_update_user(e, user.uid, user.discord_guild, sess)
                         await update_refresh_time(user.uid, sess=sess)
-                        await event_update(client, user.uid, user.discord_guild, sess)
+                        # await event_update(client, user.uid, user.discord_guild, sess)
                         resp += f'Account {escape_markdown(user.nickname)}[{user.uid}] refreshed.\n'
                     else:
                         next_refresh = datetime.timedelta(seconds=user.last_refresh + 12 * 3600 - int(time.time()))
@@ -810,8 +837,8 @@ async def work_thread():
                     await do_daily(bot, user, sess)
                     await abyss_update_user(client, user.uid, user.discord_guild, sess)
                     await note_check_user(bot, client, user)
-                    log.info(f'Updating events for {user.uid}')
-                    await event_update(client, user.uid, user.discord_guild, sess)
+                    # log.info(f'Updating events for {user.uid}')
+                    # await event_update(client, user.uid, user.discord_guild, sess)
                     log.info(f'Updating artifacts for {user.uid}')
                     await artifact_update_user(e, user.uid, user.discord_guild, sess)
                 except genshin.errors.InvalidCookies:

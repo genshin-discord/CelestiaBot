@@ -82,22 +82,23 @@ class EnkaArtifact:
 
     async def fetch_artifact_user(self, uid):
         data = await self.e.fetch_user(uid)
-        for character in data.characters:
-            for artifact in character.artifacts:
-                ad = ArtifactData()
-                ad.icon = artifact.flat.icon
-                ad.name = f'{artifact.flat.setNameText} {artifact.flat.nameText}'
-                ad.main_stat = self.parse_stats(artifact.flat.main_stat)
-                ad.sub_stats = []
-                ad.level = artifact.data.level - 1
-                for stat in artifact.flat.sub_stats:
-                    ad.sub_stats.append(self.parse_stats(stat))
-                if artifact.flat.equipType in ArtifactType:
-                    ad.type = ArtifactType[artifact.flat.equipType]
-                else:
-                    ad.type = artifact.flat.equipType
-                ad.score = self.evaluate(ad)
-                yield ad
+        if data.characters:
+            for character in data.characters:
+                for artifact in character.artifacts:
+                    ad = ArtifactData()
+                    ad.icon = artifact.flat.icon
+                    ad.name = f'{artifact.flat.set_name} {artifact.flat.nameText}'
+                    ad.main_stat = self.parse_stats(artifact.flat.main_stat)
+                    ad.sub_stats = []
+                    ad.level = artifact.data.level - 1
+                    for stat in artifact.flat.sub_stats:
+                        ad.sub_stats.append(self.parse_stats(stat))
+                    if artifact.flat.equipType in ArtifactType:
+                        ad.type = ArtifactType[artifact.flat.equipType]
+                    else:
+                        ad.type = artifact.flat.equipType
+                    ad.score = self.evaluate(ad)
+                    yield ad
 
 
 ArtifactUpdateCache = {}

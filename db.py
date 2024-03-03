@@ -60,6 +60,12 @@ class EventConfig(Base):
     sort = Column(Integer)
 
 
+class AbyssConfig(Base):
+    __tablename__ = 'abyss_config'
+    season = Column(String, primary_key=True)
+    fun_module = Column(String)
+
+
 class Admin(Base):
     __tablename__ = 'admin'
     discord_id = Column(String, primary_key=True)
@@ -115,6 +121,7 @@ async def create_session():
         set_mode = text('''SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));''')
         await session.execute(set_mode)
     return async_sess
+
 
 db_sess = None
 
@@ -352,6 +359,21 @@ async def get_current_abyss_season(sess=db_sess):
     data = await sess.execute(query)
     abyss: Abyss = data.scalars().first()
     return abyss.season
+
+
+async def get_abyss_fun_module(season, sess=db_sess) -> AbyssConfig:
+    query = select(AbyssConfig).where(AbyssConfig.season == season)
+    data = await sess.execute(query)
+    abyss: AbyssConfig = data.scalars().first()
+    return abyss
+
+
+async def update_abyss_fun_module(season, module, sess=db_sess):
+    abyss = AbyssConfig()
+    abyss.season = season
+    abyss.fun_module = module
+    sess.add(abyss)
+    return await sess.commit()
 
 
 async def get_abyss_rank(discord_guild, limit=5, star_limit=999, sess=db_sess):

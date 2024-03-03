@@ -1,0 +1,12 @@
+genshin~=1.6.1
+matplotlib~=3.5.2
+svn~=1.0.1
+sqlalchemy~=1.4.37
+aiohttp~=3.8.1
+beautifulsoup4~=4.11.1
+aiofiles~=22.1.0
+googletrans~=3.0.0
+gTTS~=2.4.0
+aiocache~=0.11.1
+pydantic~>=1.9.1
+numpy~=1.24.4
