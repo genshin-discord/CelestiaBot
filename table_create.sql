@@ -1,4 +1,4 @@
-create table if not exists abyss
+create table abyss
 (
     uid           int                         not null,
     season        int                         null,
@@ -11,7 +11,21 @@ create table if not exists abyss
     primary key (uid, time, star)
 );
 
-create table if not exists artifacts
+create table abyss_config
+(
+    season     int default 0 not null
+        primary key,
+    fun_module text          null
+);
+
+create table admin
+(
+    discord_id varchar(100)  not null
+        primary key,
+    level      int default 0 null
+);
+
+create table artifacts
 (
     uid           int          null,
     artifact      text         null,
@@ -25,7 +39,7 @@ create table if not exists artifacts
         unique (hash)
 );
 
-create table if not exists event
+create table event
 (
     uid           int           not null,
     event_id      varchar(50)   not null,
@@ -35,7 +49,7 @@ create table if not exists event
     primary key (uid, event_id)
 );
 
-create table if not exists event_config
+create table event_config
 (
     event_id        varchar(50)   not null
         primary key,
@@ -47,7 +61,7 @@ create table if not exists event_config
         unique (event_id)
 );
 
-create table if not exists users
+create table users
 (
     uid           int           not null
         primary key,
